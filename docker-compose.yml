@@ -12,5 +12,15 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
+  # Development mailbox: catches every email the backend sends.
+  # Web UI: http://localhost:8025, SMTP: localhost:1025. Nothing reaches real inboxes.
+  mailpit:
+    image: axllent/mailpit:v1.21.8
+    container_name: techstore-mailpit
+    restart: unless-stopped
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+
 volumes:
   postgres_data:
