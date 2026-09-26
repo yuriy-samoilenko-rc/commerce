@@ -1,5 +1,11 @@
 import { BadRequestException, ConflictException, Injectable } from '@nestjs/common';
-import { Prisma, SerialUnitStatus, StockMovementType } from '../generated/prisma/client';
+import { formatCountNumber } from '../common/document-numbers';
+import {
+  InventoryStatus,
+  Prisma,
+  SerialUnitStatus,
+  StockMovementType,
+} from '../generated/prisma/client';
 
 export type Tx = Prisma.TransactionClient;
 
@@ -13,6 +19,7 @@ export interface MoveInput {
   reason?: string | null;
   receivingId?: string;
   transferId?: string;
+  inventoryCountId?: string;
   /** Required for serial-tracked products, one per unit moved. */
   serialNumbers?: string[];
 }
@@ -26,7 +33,11 @@ const RULES: Record<
   ADJUSTMENT: { in: 'register', out: SerialUnitStatus.WRITTEN_OFF, newGoods: true },
   TRANSFER_OUT: { out: SerialUnitStatus.IN_TRANSIT, newGoods: false },
   TRANSFER_IN: { in: 'arrive', newGoods: false },
+  // Found surplus is registered even if archived: it physically exists.
+  INVENTORY: { in: 'register', out: SerialUnitStatus.WRITTEN_OFF, newGoods: false },
 };
+
+const OPEN_COUNT = [InventoryStatus.IN_PROGRESS, InventoryStatus.COUNTED];
 
 /**
  * The only code allowed to change stock balances. Every change updates the
@@ -48,12 +59,16 @@ export class StockLedgerService {
     const [product, warehouse] = await Promise.all([
       tx.product.findUnique({
         where: { id: input.productId },
-        select: { name: true, trackSerial: true, isArchived: true },
+        select: { name: true, trackSerial: true, isArchived: true, categoryId: true },
       }),
       tx.warehouse.findUnique({ where: { id: input.warehouseId }, select: { isActive: true } }),
     ]);
     if (!product) throw new BadRequestException('Product not found');
     if (!warehouse) throw new BadRequestException('Warehouse not found');
+
+    if (input.type !== StockMovementType.INVENTORY) {
+      await this.assertNotBeingCounted(tx, input.warehouseId, product.categoryId, product.name);
+    }
 
     // Only brand-new goods are blocked; stock already on the way must be able to arrive.
     if (incoming && rule.newGoods && product.isArchived) {
@@ -88,6 +103,103 @@ export class StockLedgerService {
     else if (rule.in === 'arrive') unitIds = await this.arriveUnits(tx, productId, warehouseId, serials);
     else unitIds = await this.registerUnits(tx, productId, warehouseId, serials);
     await this.post(tx, input, unitIds);
+  }
+
+  /**
+   * Reserves stock for an order line, preferring one active warehouse that can cover
+   * the whole quantity, otherwise combining several. Physical stock is not moved.
+   */
+  async reserve(tx: Tx, input: { orderItemId: string; productId: string; quantity: number }) {
+    const product = await tx.product.findUniqueOrThrow({
+      where: { id: input.productId },
+      select: { name: true },
+    });
+    const rows = await tx.stock.findMany({
+      where: {
+        productId: input.productId,
+        warehouse: { isActive: true },
+        quantity: { gt: tx.stock.fields.reserved },
+      },
+      select: { warehouseId: true, quantity: true, reserved: true },
+    });
+    const free = (r: (typeof rows)[number]) => r.quantity - r.reserved;
+    rows.sort((a, b) => {
+      const aCovers = free(a) >= input.quantity;
+      const bCovers = free(b) >= input.quantity;
+      if (aCovers !== bCovers) return aCovers ? -1 : 1;
+      return free(b) - free(a);
+    });
+
+    let need = input.quantity;
+    for (const row of rows) {
+      if (!need) break;
+      const take = Math.min(need, free(row));
+      // Same atomic pattern as write-offs: a concurrent order cannot take the same units.
+      const updated = await tx.$queryRaw<unknown[]>`
+        UPDATE "stock" SET "reserved" = "reserved" + ${take}, "updatedAt" = now()
+        WHERE "productId" = ${input.productId} AND "warehouseId" = ${row.warehouseId}
+          AND "quantity" - "reserved" >= ${take}
+        RETURNING 1`;
+      if (!updated.length) continue;
+      await tx.stockReservation.create({
+        data: {
+          orderItemId: input.orderItemId,
+          productId: input.productId,
+          warehouseId: row.warehouseId,
+          quantity: take,
+        },
+      });
+      need -= take;
+    }
+    if (need) {
+      throw new ConflictException(
+        `Not enough stock for "${product.name}": requested ${input.quantity}, available ${input.quantity - need}`,
+      );
+    }
+  }
+
+  /** Releases every active reservation of an order and gives the units back to "available". */
+  async releaseReservations(tx: Tx, orderId: string, reason: string) {
+    const active = await tx.stockReservation.findMany({
+      where: { orderItem: { orderId }, releasedAt: null },
+      select: { id: true, productId: true, warehouseId: true, quantity: true },
+    });
+    if (!active.length) return;
+
+    const { count } = await tx.stockReservation.updateMany({
+      where: { id: { in: active.map((r) => r.id) }, releasedAt: null },
+      data: { releasedAt: new Date(), releaseReason: reason },
+    });
+    if (count !== active.length) {
+      throw new ConflictException('Reservations were changed by another operation, retry');
+    }
+    for (const r of active) {
+      await tx.$executeRaw`
+        UPDATE "stock" SET "reserved" = "reserved" - ${r.quantity}, "updatedAt" = now()
+        WHERE "productId" = ${r.productId} AND "warehouseId" = ${r.warehouseId}`;
+    }
+  }
+
+  private async assertNotBeingCounted(
+    tx: Tx,
+    warehouseId: string,
+    categoryId: string,
+    productName: string,
+  ) {
+    const count = await tx.inventoryCount.findFirst({
+      where: {
+        warehouseId,
+        status: { in: OPEN_COUNT },
+        OR: [{ scopeCategoryIds: { isEmpty: true } }, { scopeCategoryIds: { has: categoryId } }],
+      },
+      select: { number: true },
+    });
+    if (count) {
+      throw new ConflictException(
+        `"${productName}" is being counted in ${formatCountNumber(count.number)} at this warehouse; ` +
+          'stock movements resume once the count is approved or cancelled',
+      );
+    }
   }
 
   private async registerUnits(tx: Tx, productId: string, warehouseId: string, serials: string[]) {
@@ -170,6 +282,7 @@ export class StockLedgerService {
       reason: input.reason ?? null,
       receivingId: input.receivingId,
       transferId: input.transferId,
+      inventoryCountId: input.inventoryCountId,
     };
 
     if (!serialUnitIds?.length) {

@@ -4,6 +4,8 @@ import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
 import { BrandsModule } from './brands/brands.module';
 import { CategoriesModule } from './categories/categories.module';
+import { InventoryModule } from './inventory/inventory.module';
+import { OrdersModule } from './orders/orders.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { ProductsModule } from './products/products.module';
 import { ReceivingsModule } from './receivings/receivings.module';
@@ -26,6 +28,8 @@ import { WarehousesModule } from './warehouses/warehouses.module';
     StockModule,
     ReceivingsModule,
     TransfersModule,
+    InventoryModule,
+    OrdersModule,
   ],
   controllers: [AppController],
   providers: [AppService],

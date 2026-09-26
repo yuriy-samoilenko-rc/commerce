@@ -25,12 +25,17 @@ const publicSelect = {
   warrantyMonths: true,
   weightKg: true,
   ...relations,
-  stock: { select: { quantity: true, reserved: true } },
+  // only stock that orders can actually be reserved from
+  stock: {
+    where: { warehouse: { isActive: true } },
+    select: { quantity: true, reserved: true },
+  },
 } satisfies Prisma.ProductSelect;
 
 function staffSelect(canSeeCost: boolean) {
   return {
     ...publicSelect,
+    stock: { select: { quantity: true, reserved: true } },
     barcode: true,
     trackSerial: true,
     vatPercent: true,

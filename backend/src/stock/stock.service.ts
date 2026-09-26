@@ -1,5 +1,9 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { formatReceivingNumber, formatTransferNumber } from '../common/document-numbers';
+import {
+  formatCountNumber,
+  formatReceivingNumber,
+  formatTransferNumber,
+} from '../common/document-numbers';
 import { pageArgs } from '../common/dto/pagination-query.dto';
 import { Prisma, StockMovementType } from '../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
@@ -20,22 +24,26 @@ const movementSelect = {
   serialUnit: { select: { serialNumber: true } },
   receiving: { select: { id: true, number: true } },
   transfer: { select: { id: true, number: true } },
+  inventoryCount: { select: { id: true, number: true } },
 } satisfies Prisma.StockMovementSelect;
 
 type MovementRow = Prisma.StockMovementGetPayload<{ select: typeof movementSelect }>;
 
-function documentOf({ receiving, transfer }: MovementRow) {
+function documentOf({ receiving, transfer, inventoryCount }: MovementRow) {
   if (receiving) {
     return { type: 'RECEIVING', id: receiving.id, number: formatReceivingNumber(receiving.number) };
   }
   if (transfer) {
     return { type: 'TRANSFER', id: transfer.id, number: formatTransferNumber(transfer.number) };
   }
+  if (inventoryCount) {
+    return { type: 'INVENTORY', id: inventoryCount.id, number: formatCountNumber(inventoryCount.number) };
+  }
   return null;
 }
 
 function presentMovement(row: MovementRow) {
-  const { serialUnit, receiving: _r, transfer: _t, ...m } = row;
+  const { serialUnit, receiving: _r, transfer: _t, inventoryCount: _c, ...m } = row;
   return { ...m, serialNumber: serialUnit?.serialNumber ?? null, document: documentOf(row) };
 }
 

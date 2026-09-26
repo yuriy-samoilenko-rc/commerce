@@ -33,11 +33,17 @@ model User {
   updatedAt    DateTime @updatedAt
 
   stockMovements      StockMovement[]
-  receivingsCreated   Receiving[]     @relation("ReceivingCreatedBy")
-  receivingsConfirmed Receiving[]     @relation("ReceivingConfirmedBy")
-  transfersCreated    Transfer[]      @relation("TransferCreatedBy")
-  transfersSent       Transfer[]      @relation("TransferSentBy")
-  transfersReceived   Transfer[]      @relation("TransferReceivedBy")
+  receivingsCreated   Receiving[]      @relation("ReceivingCreatedBy")
+  receivingsConfirmed Receiving[]      @relation("ReceivingConfirmedBy")
+  transfersCreated    Transfer[]       @relation("TransferCreatedBy")
+  transfersSent       Transfer[]       @relation("TransferSentBy")
+  transfersReceived   Transfer[]       @relation("TransferReceivedBy")
+  countsCreated       InventoryCount[] @relation("CountCreatedBy")
+  countsFinished      InventoryCount[] @relation("CountFinishedBy")
+  countsApproved      InventoryCount[] @relation("CountApprovedBy")
+  ordersPlaced        Order[]          @relation("OrderCustomer")
+  ordersCreated       Order[]          @relation("OrderCreatedBy")
+  orderEvents         OrderEvent[]
 
   @@map("users")
 }
@@ -91,11 +97,15 @@ model Product {
   brandId String?
   brand   Brand?  @relation(fields: [brandId], references: [id], onDelete: Restrict)
 
-  stock          Stock[]
-  movements      StockMovement[]
-  serialUnits    SerialUnit[]
-  receivingItems ReceivingItem[]
-  transferItems  TransferItem[]
+  stock            Stock[]
+  movements        StockMovement[]
+  serialUnits      SerialUnit[]
+  receivingItems   ReceivingItem[]
+  transferItems    TransferItem[]
+  inventoryLines   InventoryLine[]
+  inventorySerials InventorySerial[]
+  orderItems       OrderItem[]
+  reservations     StockReservation[]
 
   @@index([categoryId])
   @@index([brandId])
@@ -111,12 +121,14 @@ model Warehouse {
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
 
-  stock       Stock[]
-  movements   StockMovement[]
-  serialUnits   SerialUnit[]
-  receivings    Receiving[]
-  transfersFrom Transfer[]  @relation("TransferFrom")
-  transfersTo   Transfer[]  @relation("TransferTo")
+  stock           Stock[]
+  movements       StockMovement[]
+  serialUnits     SerialUnit[]
+  receivings      Receiving[]
+  transfersFrom   Transfer[]         @relation("TransferFrom")
+  transfersTo     Transfer[]         @relation("TransferTo")
+  inventoryCounts InventoryCount[]
+  reservations    StockReservation[]
 
   @@map("warehouses")
 }
@@ -167,6 +179,7 @@ enum StockMovementType {
   ADJUSTMENT
   TRANSFER_OUT
   TRANSFER_IN
+  INVENTORY
 }
 
 // Журнал движений (п.27 ТЗ). Строки только добавляются: UPDATE и DELETE запрещены
@@ -201,11 +214,15 @@ model StockMovement {
   transferId String?
   transfer   Transfer? @relation(fields: [transferId], references: [id])
 
+  inventoryCountId String?
+  inventoryCount   InventoryCount? @relation(fields: [inventoryCountId], references: [id])
+
   @@index([productId, createdAt])
   @@index([warehouseId, createdAt])
   @@index([serialUnitId])
   @@index([receivingId])
   @@index([transferId])
+  @@index([inventoryCountId])
   @@map("stock_movements")
 }
 
@@ -243,9 +260,9 @@ enum ReceivingStatus {
 
 // Приёмка товара от поставщика (п.6 ТЗ).
 model Receiving {
-  id String @id @default(uuid())
+  id     String          @id @default(uuid())
   // порядковый номер, наружу отдаётся как RCV-00001
-  number Int @unique @default(autoincrement())
+  number Int             @unique @default(autoincrement())
   status ReceivingStatus @default(DRAFT)
 
   supplierDocNumber String?
@@ -350,4 +367,232 @@ model TransferItem {
   @@index([transferId])
   @@index([productId])
   @@map("transfer_items")
+}
+
+enum InventoryStatus {
+  IN_PROGRESS
+  COUNTED
+  APPROVED
+  CANCELLED
+}
+
+// Инвентаризация (п.14 ТЗ). Пока подсчёт открыт (IN_PROGRESS или COUNTED), движения
+// по товарам в его области на этом складе запрещены: иначе продажа во время подсчёта
+// выглядела бы как недостача. В миграции: не больше одной открытой инвентаризации на склад.
+model InventoryCount {
+  id     String          @id @default(uuid())
+  // наружу отдаётся как CNT-00001
+  number Int             @unique @default(autoincrement())
+  status InventoryStatus @default(IN_PROGRESS)
+  notes  String?
+
+  warehouseId String
+  warehouse   Warehouse @relation(fields: [warehouseId], references: [id])
+
+  // Категория, выбранная при создании (null = весь склад), и все её подкатегории на тот момент.
+  categoryId       String?
+  scopeCategoryIds String[]
+
+  createdById String
+  createdBy   User   @relation("CountCreatedBy", fields: [createdById], references: [id])
+
+  finishedById String?
+  finishedBy   User?     @relation("CountFinishedBy", fields: [finishedById], references: [id])
+  finishedAt   DateTime?
+
+  approvedById String?
+  approvedBy   User?     @relation("CountApprovedBy", fields: [approvedById], references: [id])
+  approvedAt   DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  lines     InventoryLine[]
+  serials   InventorySerial[]
+  movements StockMovement[]
+
+  @@index([warehouseId, status])
+  @@map("inventory_counts")
+}
+
+// Сколько единиц товара насчитали. expectedQuantity фиксируется при утверждении.
+model InventoryLine {
+  id               String   @id @default(uuid())
+  countedQuantity  Int      @default(0)
+  expectedQuantity Int?
+  updatedAt        DateTime @updatedAt
+
+  countId String
+  count   InventoryCount @relation(fields: [countId], references: [id], onDelete: Cascade)
+
+  productId String
+  product   Product @relation(fields: [productId], references: [id])
+
+  @@unique([countId, productId])
+  @@map("inventory_lines")
+}
+
+// Отсканированные серийные номера. Уникальность в пределах подсчёта защищает от
+// двойного сканирования одного экземпляра с двух телефонов одновременно.
+model InventorySerial {
+  id           String   @id @default(uuid())
+  serialNumber String
+  scannedAt    DateTime @default(now())
+
+  countId String
+  count   InventoryCount @relation(fields: [countId], references: [id], onDelete: Cascade)
+
+  productId String
+  product   Product @relation(fields: [productId], references: [id])
+
+  @@unique([countId, serialNumber])
+  @@index([countId, productId])
+  @@map("inventory_serials")
+}
+
+// --- Этап 3: заказы и резервирование ---
+
+enum OrderStatus {
+  NEW
+  CONFIRMED
+  CANCELLED
+}
+
+enum PaymentStatus {
+  UNPAID
+  PAID
+}
+
+enum PaymentMethod {
+  CARD_ONLINE
+  CASH_ON_DELIVERY
+  BANK_TRANSFER
+}
+
+enum DeliveryMethod {
+  PICKUP
+  COURIER
+}
+
+enum OrderChannel {
+  ONLINE
+  MANUAL
+}
+
+// Заказ (п.9, п.10 ТЗ). Контакты и адрес копируются в заказ: это данные на момент
+// покупки, их не должно менять последующее редактирование профиля клиента.
+model Order {
+  id            String        @id @default(uuid())
+  // номер для людей, начинается с 100001 (см. миграцию)
+  number        Int           @unique @default(autoincrement())
+  status        OrderStatus   @default(NEW)
+  paymentStatus PaymentStatus @default(UNPAID)
+  channel       OrderChannel
+
+  paymentMethod   PaymentMethod
+  deliveryMethod  DeliveryMethod
+  customerName    String
+  customerPhone   String
+  customerEmail   String?
+  deliveryAddress String?
+  comment         String?
+
+  subtotal    Decimal @db.Decimal(12, 2)
+  deliveryFee Decimal @db.Decimal(10, 2)
+  total       Decimal @db.Decimal(12, 2)
+
+  // Когда резерв снимется автоматически, если заказ не оплатят / не подтвердят.
+  // null — резерв бессрочный (оплачен, подтверждён или создан менеджером).
+  reservationExpiresAt DateTime?
+  cancelReason         String?
+  paidAt               DateTime?
+
+  userId String?
+  user   User?   @relation("OrderCustomer", fields: [userId], references: [id])
+
+  createdById String?
+  createdBy   User?   @relation("OrderCreatedBy", fields: [createdById], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  items  OrderItem[]
+  events OrderEvent[]
+
+  @@index([status, reservationExpiresAt])
+  @@index([userId, createdAt])
+  @@index([createdAt])
+  @@map("orders")
+}
+
+// Название, SKU, цена и НДС фиксируются на момент заказа.
+model OrderItem {
+  id          String  @id @default(uuid())
+  productName String
+  sku         String
+  quantity    Int
+  unitPrice   Decimal @db.Decimal(10, 2)
+  vatPercent  Decimal @db.Decimal(5, 2)
+  lineTotal   Decimal @db.Decimal(12, 2)
+
+  orderId String
+  order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  productId String
+  product   Product @relation(fields: [productId], references: [id])
+
+  reservations StockReservation[]
+
+  @@index([orderId])
+  @@index([productId])
+  @@map("order_items")
+}
+
+// Резерв конкретного количества на конкретном складе под строку заказа.
+// Активен, пока releasedAt = null. stock.reserved = сумма активных резервов.
+model StockReservation {
+  id            String    @id @default(uuid())
+  quantity      Int
+  createdAt     DateTime  @default(now())
+  releasedAt    DateTime?
+  releaseReason String?
+
+  orderItemId String
+  orderItem   OrderItem @relation(fields: [orderItemId], references: [id])
+
+  productId String
+  product   Product @relation(fields: [productId], references: [id])
+
+  warehouseId String
+  warehouse   Warehouse @relation(fields: [warehouseId], references: [id])
+
+  @@index([orderItemId])
+  @@index([productId, warehouseId, releasedAt])
+  @@map("stock_reservations")
+}
+
+enum OrderEventType {
+  CREATED
+  CONFIRMED
+  PAID
+  CANCELLED
+  EXPIRED
+}
+
+// История заказа (order_status_history в п.26 ТЗ): что произошло, когда и кто это сделал.
+model OrderEvent {
+  id        String         @id @default(uuid())
+  type      OrderEventType
+  note      String?
+  createdAt DateTime       @default(now())
+
+  orderId String
+  order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  // null — действие системы (например, автоотмена по таймеру)
+  userId String?
+  user   User?   @relation(fields: [userId], references: [id])
+
+  @@index([orderId, createdAt])
+  @@map("order_events")
 }

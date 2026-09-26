@@ -73,6 +73,14 @@
     {
       "key": "transferId",
       "value": ""
+    },
+    {
+      "key": "countId",
+      "value": ""
+    },
+    {
+      "key": "orderId",
+      "value": ""
     }
   ],
   "item": [
@@ -943,6 +951,312 @@
           "request": {
             "method": "GET",
             "url": "{{baseUrl}}/stock/movements?transferId={{transferId}}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Inventory",
+      "item": [
+        {
+          "name": "Start count (whole warehouse)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code < 300) pm.collectionVariables.set('countId', pm.response.json().id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/inventory-counts",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"warehouseId\": \"{{warehouseId}}\",\n  \"notes\": \"Плановая инвентаризация\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Start count (one category)",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/inventory-counts",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"warehouseId\": \"{{warehouseId}}\",\n  \"categoryId\": \"{{categoryId}}\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Scan barcode / SKU / serial",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/inventory-counts/{{countId}}/scan",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"{{serialNumber}}\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Scan a box of 12 identical units",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/inventory-counts/{{countId}}/scan",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"8801234567890\",\n  \"quantity\": 12\n}"
+            }
+          }
+        },
+        {
+          "name": "Set counted quantity (plain product)",
+          "request": {
+            "method": "PUT",
+            "url": "{{baseUrl}}/inventory-counts/{{countId}}/lines/{{productId}}",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"countedQuantity\": 48\n}"
+            }
+          }
+        },
+        {
+          "name": "Set serial list (serial product)",
+          "request": {
+            "method": "PUT",
+            "url": "{{baseUrl}}/inventory-counts/{{countId}}/lines/{{productId}}",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"serialNumbers\": [\n    \"{{serialNumber}}\",\n    \"SN-0002\"\n  ]\n}"
+            }
+          }
+        },
+        {
+          "name": "Review differences",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/inventory-counts/{{countId}}"
+          }
+        },
+        {
+          "name": "Finish counting",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/inventory-counts/{{countId}}/finish"
+          }
+        },
+        {
+          "name": "Reopen for recount (admin)",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/inventory-counts/{{countId}}/reopen"
+          }
+        },
+        {
+          "name": "Approve and book differences (admin)",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/inventory-counts/{{countId}}/approve"
+          }
+        },
+        {
+          "name": "Cancel (admin)",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/inventory-counts/{{countId}}/cancel"
+          }
+        },
+        {
+          "name": "List counts",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/inventory-counts?warehouseId={{warehouseId}}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Orders (customer)",
+      "item": [
+        {
+          "name": "Checkout (log in as customer first)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code < 300) pm.collectionVariables.set('orderId', pm.response.json().id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/orders",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"items\": [\n    {\n      \"productId\": \"{{productId}}\",\n      \"quantity\": 1\n    }\n  ],\n  \"customerName\": \"Marko Markovic\",\n  \"customerPhone\": \"+381 64 123 4567\",\n  \"deliveryMethod\": \"COURIER\",\n  \"deliveryAddress\": \"Knez Mihailova 1, Beograd\",\n  \"paymentMethod\": \"CARD_ONLINE\",\n  \"comment\": \"Позвонить за час\"\n}"
+            }
+          }
+        },
+        {
+          "name": "My orders",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/orders"
+          }
+        },
+        {
+          "name": "My order",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/orders/{{orderId}}"
+          }
+        },
+        {
+          "name": "Cancel my unpaid order",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/orders/{{orderId}}/cancel",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"Передумал\"\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Orders (staff)",
+      "item": [
+        {
+          "name": "List orders",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/admin/orders?status=NEW&paymentStatus=UNPAID"
+          }
+        },
+        {
+          "name": "Search by number / name / phone",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/admin/orders?search=100001"
+          }
+        },
+        {
+          "name": "Order details (with reservations & history)",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/admin/orders/{{orderId}}"
+          }
+        },
+        {
+          "name": "Phone order by manager",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code < 300) pm.collectionVariables.set('orderId', pm.response.json().id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/admin/orders",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"items\": [\n    {\n      \"productId\": \"{{productId}}\",\n      \"quantity\": 1\n    }\n  ],\n  \"customerName\": \"Marko Markovic\",\n  \"customerPhone\": \"+381 64 123 4567\",\n  \"deliveryMethod\": \"COURIER\",\n  \"deliveryAddress\": \"Knez Mihailova 1, Beograd\",\n  \"paymentMethod\": \"CASH_ON_DELIVERY\",\n  \"comment\": \"Позвонить за час\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Confirm",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/admin/orders/{{orderId}}/confirm"
+          }
+        },
+        {
+          "name": "Mark paid",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/admin/orders/{{orderId}}/mark-paid"
+          }
+        },
+        {
+          "name": "Cancel (releases reservation)",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/admin/orders/{{orderId}}/cancel",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"Клиент отказался по телефону\"\n}"
+            }
           }
         }
       ]
