@@ -9,15 +9,22 @@ import { formatCountNumber } from '../common/document-numbers';
 import { pageArgs } from '../common/dto/pagination-query.dto';
 import { LONG_TX } from '../common/transactions';
 import {
+  DocumentType,
   InventoryStatus,
   Prisma,
   SerialUnitStatus,
   StockMovementType,
 } from '../generated/prisma/client';
+import { DocumentsService } from '../documents/documents.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { cleanSerials } from '../stock/document-items';
 import { StockLedgerService, Tx } from '../stock/stock-ledger.service';
-import { CountQueryDto, CreateCountDto, ScanDto, SetLineDto } from './dto/inventory.dto';
+import {
+  CountQueryDto,
+  CreateCountDto,
+  ScanDto,
+  SetLineDto,
+} from './dto/inventory.dto';
 
 const OPEN = [InventoryStatus.IN_PROGRESS, InventoryStatus.COUNTED];
 const person = { select: { id: true, name: true } };
@@ -38,7 +45,11 @@ const headerSelect = {
   approvedBy: person,
 } satisfies Prisma.InventoryCountSelect;
 
-type CountScope = { id: string; warehouseId: string; scopeCategoryIds: string[] };
+type CountScope = {
+  id: string;
+  warehouseId: string;
+  scopeCategoryIds: string[];
+};
 
 export interface DiffRow {
   product: { id: string; name: string; sku: string; trackSerial: boolean };
@@ -54,17 +65,24 @@ export class InventoryService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly ledger: StockLedgerService,
+    private readonly documents: DocumentsService,
     private readonly categories: CategoriesService,
   ) {}
 
   async create(dto: CreateCountDto, userId: string) {
-    const warehouse = await this.prisma.warehouse.findUnique({ where: { id: dto.warehouseId } });
+    const warehouse = await this.prisma.warehouse.findUnique({
+      where: { id: dto.warehouseId },
+    });
     if (!warehouse) throw new BadRequestException('Warehouse not found');
     let scopeCategoryIds: string[] = [];
     if (dto.categoryId) {
-      const category = await this.prisma.category.findUnique({ where: { id: dto.categoryId } });
+      const category = await this.prisma.category.findUnique({
+        where: { id: dto.categoryId },
+      });
       if (!category) throw new BadRequestException('Category not found');
-      scopeCategoryIds = await this.categories.withDescendantIds(dto.categoryId);
+      scopeCategoryIds = await this.categories.withDescendantIds(
+        dto.categoryId,
+      );
     }
 
     const open = await this.prisma.inventoryCount.findFirst({
@@ -85,7 +103,10 @@ export class InventoryService {
   }
 
   async list(q: CountQueryDto) {
-    const where: Prisma.InventoryCountWhereInput = { status: q.status, warehouseId: q.warehouseId };
+    const where: Prisma.InventoryCountWhereInput = {
+      status: q.status,
+      warehouseId: q.warehouseId,
+    };
     const [rows, total] = await this.prisma.$transaction([
       this.prisma.inventoryCount.findMany({
         where,
@@ -131,7 +152,12 @@ export class InventoryService {
   async scan(id: string, dto: ScanDto) {
     const code = dto.code.trim();
     const productId = await this.prisma.$transaction(async (tx) => {
-      const count = await this.lockCount(tx, id, InventoryStatus.IN_PROGRESS, 'scanned');
+      const count = await this.lockCount(
+        tx,
+        id,
+        InventoryStatus.IN_PROGRESS,
+        'scanned',
+      );
 
       const unit = await tx.serialUnit.findUnique({
         where: { serialNumber: code },
@@ -143,7 +169,9 @@ export class InventoryService {
       });
       if (unit) {
         if (dto.quantity && dto.quantity !== 1) {
-          throw new BadRequestException('A serial number is always exactly one unit');
+          throw new BadRequestException(
+            'A serial number is always exactly one unit',
+          );
         }
         this.assertInScope(count, unit.product);
         this.assertUnitHere(count, code, unit);
@@ -161,12 +189,18 @@ export class InventoryService {
         );
       }
       if (product.trackSerial) {
-        throw new BadRequestException(`"${product.name}" is counted by serial number: scan the serial, not the barcode`);
+        throw new BadRequestException(
+          `"${product.name}" is counted by serial number: scan the serial, not the barcode`,
+        );
       }
       this.assertInScope(count, product);
       await tx.inventoryLine.upsert({
         where: { countId_productId: { countId: id, productId: product.id } },
-        create: { countId: id, productId: product.id, countedQuantity: dto.quantity ?? 1 },
+        create: {
+          countId: id,
+          productId: product.id,
+          countedQuantity: dto.quantity ?? 1,
+        },
         update: { countedQuantity: { increment: dto.quantity ?? 1 } },
       });
       return product.id;
@@ -176,7 +210,12 @@ export class InventoryService {
 
   async setLine(id: string, productId: string, dto: SetLineDto) {
     await this.prisma.$transaction(async (tx) => {
-      const count = await this.lockCount(tx, id, InventoryStatus.IN_PROGRESS, 'edited');
+      const count = await this.lockCount(
+        tx,
+        id,
+        InventoryStatus.IN_PROGRESS,
+        'edited',
+      );
       const product = await tx.product.findUnique({
         where: { id: productId },
         select: { id: true, name: true, trackSerial: true, categoryId: true },
@@ -186,40 +225,63 @@ export class InventoryService {
 
       if (!product.trackSerial) {
         if (dto.serialNumbers || dto.countedQuantity === undefined) {
-          throw new BadRequestException(`"${product.name}" is counted by quantity: send countedQuantity`);
+          throw new BadRequestException(
+            `"${product.name}" is counted by quantity: send countedQuantity`,
+          );
         }
         await tx.inventoryLine.upsert({
           where: { countId_productId: { countId: id, productId } },
-          create: { countId: id, productId, countedQuantity: dto.countedQuantity },
+          create: {
+            countId: id,
+            productId,
+            countedQuantity: dto.countedQuantity,
+          },
           update: { countedQuantity: dto.countedQuantity },
         });
         return;
       }
 
       if (!dto.serialNumbers || dto.countedQuantity !== undefined) {
-        throw new BadRequestException(`"${product.name}" is counted by serial number: send serialNumbers`);
+        throw new BadRequestException(
+          `"${product.name}" is counted by serial number: send serialNumbers`,
+        );
       }
       const serials = cleanSerials(dto.serialNumbers);
       const duplicates = serials.filter((s, i) => serials.indexOf(s) !== i);
       if (duplicates.length) {
-        throw new BadRequestException(`Duplicate serial numbers: ${[...new Set(duplicates)].join(', ')}`);
+        throw new BadRequestException(
+          `Duplicate serial numbers: ${[...new Set(duplicates)].join(', ')}`,
+        );
       }
       // Known serials must belong to this product and sit on this warehouse's shelf;
       // unknown ones are allowed and will be registered as surplus on approval.
       const known = await tx.serialUnit.findMany({
         where: { serialNumber: { in: serials } },
-        select: { serialNumber: true, status: true, warehouseId: true, productId: true },
+        select: {
+          serialNumber: true,
+          status: true,
+          warehouseId: true,
+          productId: true,
+        },
       });
       for (const unit of known) {
         if (unit.productId !== productId) {
-          throw new ConflictException(`Serial ${unit.serialNumber} belongs to another product`);
+          throw new ConflictException(
+            `Serial ${unit.serialNumber} belongs to another product`,
+          );
         }
         this.assertUnitHere(count, unit.serialNumber, unit);
       }
 
-      await tx.inventorySerial.deleteMany({ where: { countId: id, productId } });
+      await tx.inventorySerial.deleteMany({
+        where: { countId: id, productId },
+      });
       await tx.inventorySerial.createMany({
-        data: serials.map((serialNumber) => ({ countId: id, productId, serialNumber })),
+        data: serials.map((serialNumber) => ({
+          countId: id,
+          productId,
+          serialNumber,
+        })),
       });
       await tx.inventoryLine.upsert({
         where: { countId_productId: { countId: id, productId } },
@@ -231,18 +293,30 @@ export class InventoryService {
   }
 
   async finish(id: string, userId: string) {
-    await this.transition(id, InventoryStatus.IN_PROGRESS, InventoryStatus.COUNTED, 'finished', {
-      finishedById: userId,
-      finishedAt: new Date(),
-    });
+    await this.transition(
+      id,
+      InventoryStatus.IN_PROGRESS,
+      InventoryStatus.COUNTED,
+      'finished',
+      {
+        finishedById: userId,
+        finishedAt: new Date(),
+      },
+    );
     return this.findOne(id);
   }
 
   async reopen(id: string) {
-    await this.transition(id, InventoryStatus.COUNTED, InventoryStatus.IN_PROGRESS, 'reopened', {
-      finishedById: null,
-      finishedAt: null,
-    });
+    await this.transition(
+      id,
+      InventoryStatus.COUNTED,
+      InventoryStatus.IN_PROGRESS,
+      'reopened',
+      {
+        finishedById: null,
+        finishedAt: null,
+      },
+    );
     return this.findOne(id);
   }
 
@@ -260,13 +334,22 @@ export class InventoryService {
     await this.prisma.$transaction(async (tx) => {
       const { count: updated } = await tx.inventoryCount.updateMany({
         where: { id, status: InventoryStatus.COUNTED },
-        data: { status: InventoryStatus.APPROVED, approvedById: userId, approvedAt: new Date() },
+        data: {
+          status: InventoryStatus.APPROVED,
+          approvedById: userId,
+          approvedAt: new Date(),
+        },
       });
       if (!updated) await this.throwWrongStatus(tx, id, 'approved');
 
       const count = await tx.inventoryCount.findUniqueOrThrow({
         where: { id },
-        select: { id: true, number: true, warehouseId: true, scopeCategoryIds: true },
+        select: {
+          id: true,
+          number: true,
+          warehouseId: true,
+          scopeCategoryIds: true,
+        },
       });
       const base = {
         type: StockMovementType.INVENTORY,
@@ -282,32 +365,59 @@ export class InventoryService {
           const missing = row.missingSerials ?? [];
           const extra = row.extraSerials ?? [];
           if (missing.length) {
-            await this.ledger.move(tx, { ...base, productId, quantity: -missing.length, serialNumbers: missing });
+            await this.ledger.move(tx, {
+              ...base,
+              productId,
+              quantity: -missing.length,
+              serialNumbers: missing,
+            });
           }
           if (extra.length) {
-            await this.ledger.move(tx, { ...base, productId, quantity: extra.length, serialNumbers: extra });
+            await this.ledger.move(tx, {
+              ...base,
+              productId,
+              quantity: extra.length,
+              serialNumbers: extra,
+            });
           }
         } else if (row.difference) {
-          await this.ledger.move(tx, { ...base, productId, quantity: row.difference });
+          await this.ledger.move(tx, {
+            ...base,
+            productId,
+            quantity: row.difference,
+          });
         }
         // Keep the book value the difference was measured against.
         await tx.inventoryLine.upsert({
           where: { countId_productId: { countId: id, productId } },
-          create: { countId: id, productId, countedQuantity: row.counted, expectedQuantity: row.expected },
+          create: {
+            countId: id,
+            productId,
+            countedQuantity: row.counted,
+            expectedQuantity: row.expected,
+          },
           update: { expectedQuantity: row.expected },
         });
       }
+      await this.documents.issue(tx, DocumentType.INVENTORY_ACT, id, userId);
     }, LONG_TX);
     return this.findOne(id);
   }
 
-  private async computeDiff(db: Tx | PrismaService, count: CountScope): Promise<DiffRow[]> {
+  private async computeDiff(
+    db: Tx | PrismaService,
+    count: CountScope,
+  ): Promise<DiffRow[]> {
     const inScope: Prisma.ProductWhereInput = count.scopeCategoryIds.length
       ? { categoryId: { in: count.scopeCategoryIds } }
       : {};
     const [stock, lines, scanned] = await Promise.all([
       db.stock.findMany({
-        where: { warehouseId: count.warehouseId, quantity: { gt: 0 }, product: inScope },
+        where: {
+          warehouseId: count.warehouseId,
+          quantity: { gt: 0 },
+          product: inScope,
+        },
         select: { productId: true, quantity: true },
       }),
       db.inventoryLine.findMany({
@@ -321,7 +431,9 @@ export class InventoryService {
     ]);
 
     const expectedQty = new Map(stock.map((s) => [s.productId, s.quantity]));
-    const countedQty = new Map(lines.map((l) => [l.productId, l.countedQuantity]));
+    const countedQty = new Map(
+      lines.map((l) => [l.productId, l.countedQuantity]),
+    );
     const ids = [...new Set([...expectedQty.keys(), ...countedQty.keys()])];
     const products = await db.product.findMany({
       where: { id: { in: ids } },
@@ -340,13 +452,25 @@ export class InventoryService {
           select: { productId: true, serialNumber: true },
         })
       : [];
-    const byProduct = (rows: { productId: string; serialNumber: string }[], productId: string) =>
-      new Set(rows.filter((r) => r.productId === productId).map((r) => r.serialNumber));
+    const byProduct = (
+      rows: { productId: string; serialNumber: string }[],
+      productId: string,
+    ) =>
+      new Set(
+        rows
+          .filter((r) => r.productId === productId)
+          .map((r) => r.serialNumber),
+      );
 
     return products.map((product) => {
       const expected = expectedQty.get(product.id) ?? 0;
       const counted = countedQty.get(product.id) ?? 0;
-      const row: DiffRow = { product, expected, counted, difference: counted - expected };
+      const row: DiffRow = {
+        product,
+        expected,
+        counted,
+        difference: counted - expected,
+      };
       if (product.trackSerial) {
         const book = byProduct(onShelf, product.id);
         const found = byProduct(scanned, product.id);
@@ -363,13 +487,20 @@ export class InventoryService {
       select: {
         countedQuantity: true,
         expectedQuantity: true,
-        product: { select: { id: true, name: true, sku: true, trackSerial: true } },
+        product: {
+          select: { id: true, name: true, sku: true, trackSerial: true },
+        },
       },
       orderBy: { product: { name: 'asc' } },
     });
     return lines.map((l) => {
       const expected = l.expectedQuantity ?? 0;
-      return { product: l.product, expected, counted: l.countedQuantity, difference: l.countedQuantity - expected };
+      return {
+        product: l.product,
+        expected,
+        counted: l.countedQuantity,
+        difference: l.countedQuantity - expected,
+      };
     });
   }
 
@@ -383,9 +514,13 @@ export class InventoryService {
         where: { id: productId },
         select: { id: true, name: true, sku: true, trackSerial: true },
       }),
-      this.prisma.inventoryLine.findUnique({ where: { countId_productId: { countId: id, productId } } }),
+      this.prisma.inventoryLine.findUnique({
+        where: { countId_productId: { countId: id, productId } },
+      }),
       this.prisma.stock.findUnique({
-        where: { productId_warehouseId: { productId, warehouseId: count.warehouseId } },
+        where: {
+          productId_warehouseId: { productId, warehouseId: count.warehouseId },
+        },
         select: { quantity: true },
       }),
       this.prisma.inventorySerial.findMany({
@@ -401,16 +536,26 @@ export class InventoryService {
       expected,
       counted,
       difference: counted - expected,
-      ...(product.trackSerial && { serialNumbers: serials.map((s) => s.serialNumber) }),
+      ...(product.trackSerial && {
+        serialNumbers: serials.map((s) => s.serialNumber),
+      }),
     };
   }
 
-  private async addSerial(tx: Tx, countId: string, productId: string, serialNumber: string) {
+  private async addSerial(
+    tx: Tx,
+    countId: string,
+    productId: string,
+    serialNumber: string,
+  ) {
     const already = await tx.inventorySerial.findUnique({
       where: { countId_serialNumber: { countId, serialNumber } },
     });
-    if (already) throw new ConflictException(`Serial ${serialNumber} is already counted`);
-    await tx.inventorySerial.create({ data: { countId, productId, serialNumber } });
+    if (already)
+      throw new ConflictException(`Serial ${serialNumber} is already counted`);
+    await tx.inventorySerial.create({
+      data: { countId, productId, serialNumber },
+    });
     await tx.inventoryLine.upsert({
       where: { countId_productId: { countId, productId } },
       create: { countId, productId, countedQuantity: 1 },
@@ -422,7 +567,12 @@ export class InventoryService {
    * Touches the count row, which locks it until commit: scans are serialized with each
    * other and with finish, so nothing can be added after the count was closed.
    */
-  private async lockCount(tx: Tx, id: string, status: InventoryStatus, action: string) {
+  private async lockCount(
+    tx: Tx,
+    id: string,
+    status: InventoryStatus,
+    action: string,
+  ) {
     const { count } = await tx.inventoryCount.updateMany({
       where: { id, status },
       data: { updatedAt: new Date() },
@@ -448,15 +598,32 @@ export class InventoryService {
     if (!count) await this.throwWrongStatus(this.prisma, id, action);
   }
 
-  private async throwWrongStatus(db: Tx | PrismaService, id: string, action: string): Promise<never> {
-    const c = await db.inventoryCount.findUnique({ where: { id }, select: { status: true } });
+  private async throwWrongStatus(
+    db: Tx | PrismaService,
+    id: string,
+    action: string,
+  ): Promise<never> {
+    const c = await db.inventoryCount.findUnique({
+      where: { id },
+      select: { status: true },
+    });
     if (!c) throw new NotFoundException('Inventory count not found');
-    throw new ConflictException(`Inventory count is ${c.status} and cannot be ${action}`);
+    throw new ConflictException(
+      `Inventory count is ${c.status} and cannot be ${action}`,
+    );
   }
 
-  private assertInScope(count: CountScope, product: { name: string; categoryId: string }) {
-    if (count.scopeCategoryIds.length && !count.scopeCategoryIds.includes(product.categoryId)) {
-      throw new BadRequestException(`"${product.name}" is outside the category being counted`);
+  private assertInScope(
+    count: CountScope,
+    product: { name: string; categoryId: string },
+  ) {
+    if (
+      count.scopeCategoryIds.length &&
+      !count.scopeCategoryIds.includes(product.categoryId)
+    ) {
+      throw new BadRequestException(
+        `"${product.name}" is outside the category being counted`,
+      );
     }
   }
 
@@ -465,9 +632,14 @@ export class InventoryService {
     serialNumber: string,
     unit: { status: SerialUnitStatus; warehouseId: string | null },
   ) {
-    if (unit.status !== SerialUnitStatus.IN_STOCK || unit.warehouseId !== count.warehouseId) {
+    if (
+      unit.status !== SerialUnitStatus.IN_STOCK ||
+      unit.warehouseId !== count.warehouseId
+    ) {
       const where =
-        unit.status === SerialUnitStatus.IN_STOCK ? 'in stock at another warehouse' : unit.status;
+        unit.status === SerialUnitStatus.IN_STOCK
+          ? 'in stock at another warehouse'
+          : unit.status;
       throw new ConflictException(
         `Serial ${serialNumber} is ${where}; resolve it (e.g. with a transfer) before counting it here`,
       );
@@ -478,8 +650,19 @@ export class InventoryService {
 function summarize(rows: DiffRow[]) {
   return {
     products: rows.length,
-    withDifference: rows.filter((r) => r.difference !== 0 || r.missingSerials?.length || r.extraSerials?.length).length,
-    shortageUnits: rows.reduce((s, r) => s + (r.missingSerials?.length ?? Math.max(0, -r.difference)), 0),
-    surplusUnits: rows.reduce((s, r) => s + (r.extraSerials?.length ?? Math.max(0, r.difference)), 0),
+    withDifference: rows.filter(
+      (r) =>
+        r.difference !== 0 ||
+        r.missingSerials?.length ||
+        r.extraSerials?.length,
+    ).length,
+    shortageUnits: rows.reduce(
+      (s, r) => s + (r.missingSerials?.length ?? Math.max(0, -r.difference)),
+      0,
+    ),
+    surplusUnits: rows.reduce(
+      (s, r) => s + (r.extraSerials?.length ?? Math.max(0, r.difference)),
+      0,
+    ),
   };
 }

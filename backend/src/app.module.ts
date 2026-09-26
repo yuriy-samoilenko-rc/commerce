@@ -5,12 +5,14 @@ import { AuditModule } from './audit/audit.module';
 import { AuthModule } from './auth/auth.module';
 import { BrandsModule } from './brands/brands.module';
 import { CategoriesModule } from './categories/categories.module';
+import { DocumentsModule } from './documents/documents.module';
 import { InventoryModule } from './inventory/inventory.module';
 import { OrdersModule } from './orders/orders.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { ProductsModule } from './products/products.module';
 import { ReceivingsModule } from './receivings/receivings.module';
 import { ReturnsModule } from './returns/returns.module';
+import { SettingsModule } from './settings/settings.module';
 import { StockModule } from './stock/stock.module';
 import { SuppliersModule } from './suppliers/suppliers.module';
 import { TransfersModule } from './transfers/transfers.module';
@@ -22,6 +24,8 @@ import { WarrantyModule } from './warranty/warranty.module';
   imports: [
     PrismaModule,
     AuditModule,
+    SettingsModule,
+    DocumentsModule,
     UsersModule,
     AuthModule,
     CategoriesModule,

@@ -4,10 +4,14 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { pageArgs, PaginationQueryDto } from '../common/dto/pagination-query.dto';
+import {
+  pageArgs,
+  PaginationQueryDto,
+} from '../common/dto/pagination-query.dto';
 import { LONG_TX } from '../common/transactions';
 import {
   DeliveryMethod,
+  DocumentType,
   OrderChannel,
   OrderEventType,
   OrderStatus,
@@ -17,15 +21,25 @@ import {
   Role,
   SerialUnitStatus,
 } from '../generated/prisma/client';
+import { DocumentsService } from '../documents/documents.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { StockLedgerService, Tx } from '../stock/stock-ledger.service';
-import { CheckoutDto, ManualOrderDto, OrderItemDto, OrderQueryDto } from './dto/order.dto';
+import {
+  CheckoutDto,
+  ManualOrderDto,
+  OrderItemDto,
+  OrderQueryDto,
+} from './dto/order.dto';
 import { DELIVERY_FEES, reservationTtlMs } from './order-settings';
 
 /** Not yet being picked: the customer may still cancel, and the reservation may expire. */
 export const EARLY = [OrderStatus.NEW, OrderStatus.CONFIRMED];
 /** Goods have not left the warehouse yet. */
-export const CANCELLABLE = [...EARLY, OrderStatus.PICKING, OrderStatus.READY_TO_SHIP];
+export const CANCELLABLE = [
+  ...EARLY,
+  OrderStatus.PICKING,
+  OrderStatus.READY_TO_SHIP,
+];
 /** Payment can arrive at any point until the order is closed (e.g. cash to the courier). */
 const PAYABLE = [...CANCELLABLE, OrderStatus.SHIPPED, OrderStatus.DELIVERED];
 
@@ -74,11 +88,27 @@ const customerSelect = {
   items: {
     select: {
       ...itemFields,
-      serialUnits: { where: { status: SerialUnitStatus.SOLD }, select: { serialNumber: true } },
+      serialUnits: {
+        where: { status: SerialUnitStatus.SOLD },
+        select: { serialNumber: true },
+      },
     },
     orderBy: { productName: 'asc' },
   },
-  events: { select: { type: true, createdAt: true }, orderBy: { createdAt: 'asc' } },
+  events: {
+    select: { type: true, createdAt: true },
+    orderBy: { createdAt: 'asc' },
+  },
+  documents: {
+    select: {
+      id: true,
+      type: true,
+      number: true,
+      status: true,
+      issuedAt: true,
+    },
+    orderBy: { issuedAt: 'asc' },
+  },
 } satisfies Prisma.OrderSelect;
 
 const staffSelect = {
@@ -104,8 +134,23 @@ const staffSelect = {
     orderBy: { productName: 'asc' },
   },
   events: {
-    select: { type: true, note: true, createdAt: true, user: { select: { id: true, name: true } } },
+    select: {
+      type: true,
+      note: true,
+      createdAt: true,
+      user: { select: { id: true, name: true } },
+    },
     orderBy: { createdAt: 'asc' },
+  },
+  documents: {
+    select: {
+      id: true,
+      type: true,
+      number: true,
+      status: true,
+      issuedAt: true,
+    },
+    orderBy: { issuedAt: 'asc' },
   },
 } satisfies Prisma.OrderSelect;
 
@@ -122,6 +167,7 @@ export class OrdersService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly ledger: StockLedgerService,
+    private readonly documents: DocumentsService,
   ) {}
 
   // ---------- placing ----------
@@ -129,7 +175,13 @@ export class OrdersService {
   async placeOnline(dto: CheckoutDto, user: { id: string; email: string }) {
     const id = await this.place(
       { ...dto, customerEmail: dto.customerEmail ?? user.email },
-      { channel: OrderChannel.ONLINE, userId: user.id, createdById: null, actorId: user.id, expires: true },
+      {
+        channel: OrderChannel.ONLINE,
+        userId: user.id,
+        createdById: null,
+        actorId: user.id,
+        expires: true,
+      },
     );
     return this.findForCustomer(id, user.id);
   }
@@ -137,8 +189,12 @@ export class OrdersService {
   async placeManual(dto: ManualOrderDto, staffId: string) {
     const { userId, ...rest } = dto;
     if (userId) {
-      const customer = await this.prisma.user.findUnique({ where: { id: userId }, select: { role: true } });
-      if (customer?.role !== Role.CUSTOMER) throw new BadRequestException('userId must be a customer account');
+      const customer = await this.prisma.user.findUnique({
+        where: { id: userId },
+        select: { role: true },
+      });
+      if (customer?.role !== Role.CUSTOMER)
+        throw new BadRequestException('userId must be a customer account');
     }
     const id = await this.place(rest, {
       channel: OrderChannel.MANUAL,
@@ -169,7 +225,10 @@ export class OrdersService {
 
       const lines = items.map((item) => {
         const p = byId.get(item.productId);
-        if (!p || p.isArchived) throw new BadRequestException(`Product ${item.productId} is not available`);
+        if (!p || p.isArchived)
+          throw new BadRequestException(
+            `Product ${item.productId} is not available`,
+          );
         const unitPrice = p.discountPrice ?? p.sellingPrice;
         return {
           productId: p.id,
@@ -181,7 +240,10 @@ export class OrdersService {
           lineTotal: unitPrice.mul(item.quantity),
         };
       });
-      const subtotal = lines.reduce((sum, l) => sum.add(l.lineTotal), new Prisma.Decimal(0));
+      const subtotal = lines.reduce(
+        (sum, l) => sum.add(l.lineTotal),
+        new Prisma.Decimal(0),
+      );
       const deliveryFee = new Prisma.Decimal(DELIVERY_FEES[dto.deliveryMethod]);
 
       const order = await tx.order.create({
@@ -194,7 +256,10 @@ export class OrdersService {
           customerName: dto.customerName,
           customerPhone: dto.customerPhone,
           customerEmail: dto.customerEmail ?? null,
-          deliveryAddress: dto.deliveryMethod === DeliveryMethod.COURIER ? dto.deliveryAddress : null,
+          deliveryAddress:
+            dto.deliveryMethod === DeliveryMethod.COURIER
+              ? dto.deliveryAddress
+              : null,
           comment: dto.comment ?? null,
           subtotal,
           deliveryFee,
@@ -203,14 +268,23 @@ export class OrdersService {
             ? new Date(Date.now() + reservationTtlMs(dto.paymentMethod))
             : null,
           items: { create: lines },
-          events: { create: { type: OrderEventType.CREATED, userId: opts.actorId } },
+          events: {
+            create: { type: OrderEventType.CREATED, userId: opts.actorId },
+          },
         },
-        select: { id: true, items: { select: { id: true, productId: true, quantity: true } } },
+        select: {
+          id: true,
+          items: { select: { id: true, productId: true, quantity: true } },
+        },
       });
 
       // Any line that cannot be covered aborts the whole order: no half-reserved orders.
       for (const item of order.items) {
-        await this.ledger.reserve(tx, { orderItemId: item.id, productId: item.productId, quantity: item.quantity });
+        await this.ledger.reserve(tx, {
+          orderItemId: item.id,
+          productId: item.productId,
+          quantity: item.quantity,
+        });
       }
       return order.id;
     }, LONG_TX);
@@ -227,11 +301,16 @@ export class OrdersService {
           status: OrderStatus.CONFIRMED,
           // A confirmed order waits for cash/transfer indefinitely; an online card order
           // still has to be paid before its timer runs out.
-          ...(order.paymentMethod !== PaymentMethod.CARD_ONLINE && { reservationExpiresAt: null }),
+          ...(order.paymentMethod !== PaymentMethod.CARD_ONLINE && {
+            reservationExpiresAt: null,
+          }),
         },
       });
       if (!count) throw wrongState(order, 'confirmed');
-      await tx.orderEvent.create({ data: { orderId: id, type: OrderEventType.CONFIRMED, userId: staffId } });
+      await tx.orderEvent.create({
+        data: { orderId: id, type: OrderEventType.CONFIRMED, userId: staffId },
+      });
+      await this.documents.issue(tx, DocumentType.INVOICE, id, staffId);
     });
     return this.findForStaff(id);
   }
@@ -239,11 +318,22 @@ export class OrdersService {
   async markPaid(id: string, staffId: string) {
     await this.prisma.$transaction(async (tx) => {
       const { count } = await tx.order.updateMany({
-        where: { id, status: { in: PAYABLE }, paymentStatus: PaymentStatus.UNPAID },
-        data: { paymentStatus: PaymentStatus.PAID, paidAt: new Date(), reservationExpiresAt: null },
+        where: {
+          id,
+          status: { in: PAYABLE },
+          paymentStatus: PaymentStatus.UNPAID,
+        },
+        data: {
+          paymentStatus: PaymentStatus.PAID,
+          paidAt: new Date(),
+          reservationExpiresAt: null,
+        },
       });
-      if (!count) throw wrongState(await this.getOrThrow(tx, id), 'marked as paid');
-      await tx.orderEvent.create({ data: { orderId: id, type: OrderEventType.PAID, userId: staffId } });
+      if (!count)
+        throw wrongState(await this.getOrThrow(tx, id), 'marked as paid');
+      await tx.orderEvent.create({
+        data: { orderId: id, type: OrderEventType.PAID, userId: staffId },
+      });
     });
     return this.findForStaff(id);
   }
@@ -251,21 +341,41 @@ export class OrdersService {
   async cancelByStaff(id: string, staffId: string, reason: string) {
     await this.prisma.$transaction(async (tx) => {
       const order = await this.getOrThrow(tx, id);
-      const note = order.paymentStatus === PaymentStatus.PAID ? `${reason} (paid: refund required)` : reason;
-      await this.cancelIn(tx, id, { status: { in: CANCELLABLE } }, note, OrderEventType.CANCELLED, staffId);
+      const note =
+        order.paymentStatus === PaymentStatus.PAID
+          ? `${reason} (paid: refund required)`
+          : reason;
+      await this.cancelIn(
+        tx,
+        id,
+        { status: { in: CANCELLABLE } },
+        note,
+        OrderEventType.CANCELLED,
+        staffId,
+      );
     });
     return this.findForStaff(id);
   }
 
   async cancelByCustomer(id: string, userId: string, reason?: string) {
     await this.prisma.$transaction(async (tx) => {
-      const order = await tx.order.findFirst({ where: { id, userId }, select: { status: true, paymentStatus: true } });
+      const order = await tx.order.findFirst({
+        where: { id, userId },
+        select: { status: true, paymentStatus: true },
+      });
       if (!order) throw new NotFoundException('Order not found');
       if (order.paymentStatus === PaymentStatus.PAID) {
-        throw new ConflictException('A paid order can only be cancelled by the store, which will issue a refund');
+        throw new ConflictException(
+          'A paid order can only be cancelled by the store, which will issue a refund',
+        );
       }
-      if (order.status !== OrderStatus.NEW && order.status !== OrderStatus.CONFIRMED) {
-        throw new ConflictException('The order is already being prepared; please contact the store');
+      if (
+        order.status !== OrderStatus.NEW &&
+        order.status !== OrderStatus.CONFIRMED
+      ) {
+        throw new ConflictException(
+          'The order is already being prepared; please contact the store',
+        );
       }
       await this.cancelIn(
         tx,
@@ -286,12 +396,24 @@ export class OrdersService {
       paymentStatus: PaymentStatus.UNPAID,
       reservationExpiresAt: { lte: now },
     };
-    const orders = await this.prisma.order.findMany({ where: due, select: { id: true }, take: 100 });
+    const orders = await this.prisma.order.findMany({
+      where: due,
+      select: { id: true },
+      take: 100,
+    });
     let expired = 0;
     for (const { id } of orders) {
       // Re-checked inside the transaction: the order may have been paid a moment ago.
       const done = await this.prisma.$transaction((tx) =>
-        this.cancelIn(tx, id, due, 'Reservation expired: not paid or confirmed in time', OrderEventType.EXPIRED, null, false),
+        this.cancelIn(
+          tx,
+          id,
+          due,
+          'Reservation expired: not paid or confirmed in time',
+          OrderEventType.EXPIRED,
+          null,
+          false,
+        ),
       );
       if (done) expired++;
     }
@@ -309,21 +431,31 @@ export class OrdersService {
   ) {
     const { count } = await tx.order.updateMany({
       where: { ...condition, id },
-      data: { status: OrderStatus.CANCELLED, cancelReason: reason, reservationExpiresAt: null },
+      data: {
+        status: OrderStatus.CANCELLED,
+        cancelReason: reason,
+        reservationExpiresAt: null,
+      },
     });
     if (!count) {
       if (!throwIfNotMatched) return false;
       throw wrongState(await this.getOrThrow(tx, id), 'cancelled');
     }
     await this.ledger.releaseReservations(tx, id, reason);
-    await tx.orderEvent.create({ data: { orderId: id, type: event, note: reason, userId } });
+    await this.documents.cancelOrderInvoices(tx, id, reason);
+    await tx.orderEvent.create({
+      data: { orderId: id, type: event, note: reason, userId },
+    });
     return true;
   }
 
   // ---------- reading ----------
 
   async findForCustomer(id: string, userId: string) {
-    const order = await this.prisma.order.findFirst({ where: { id, userId }, select: customerSelect });
+    const order = await this.prisma.order.findFirst({
+      where: { id, userId },
+      select: customerSelect,
+    });
     if (!order) throw new NotFoundException('Order not found');
     return order;
   }
@@ -331,14 +463,22 @@ export class OrdersService {
   async listForCustomer(userId: string, q: PaginationQueryDto) {
     const where = { userId };
     const [items, total] = await this.prisma.$transaction([
-      this.prisma.order.findMany({ where, select: customerSelect, orderBy: { number: 'desc' }, ...pageArgs(q) }),
+      this.prisma.order.findMany({
+        where,
+        select: customerSelect,
+        orderBy: { number: 'desc' },
+        ...pageArgs(q),
+      }),
       this.prisma.order.count({ where }),
     ]);
     return { items, total, page: q.page, limit: q.limit };
   }
 
   async findForStaff(id: string) {
-    const order = await this.prisma.order.findUnique({ where: { id }, select: staffSelect });
+    const order = await this.prisma.order.findUnique({
+      where: { id },
+      select: staffSelect,
+    });
     if (!order) throw new NotFoundException('Order not found');
     return order;
   }
@@ -352,7 +492,11 @@ export class OrdersService {
     const search = q.search?.trim();
     if (search) {
       const contains = { contains: search, mode: 'insensitive' as const };
-      where.OR = [{ customerName: contains }, { customerPhone: contains }, { customerEmail: contains }];
+      where.OR = [
+        { customerName: contains },
+        { customerPhone: contains },
+        { customerEmail: contains },
+      ];
       if (/^\d{1,9}$/.test(search)) where.OR.push({ number: Number(search) });
     }
     const [rows, total] = await this.prisma.$transaction([
@@ -364,7 +508,10 @@ export class OrdersService {
       }),
       this.prisma.order.count({ where }),
     ]);
-    const items = rows.map(({ _count, ...o }) => ({ ...o, itemCount: _count.items }));
+    const items = rows.map(({ _count, ...o }) => ({
+      ...o,
+      itemCount: _count.items,
+    }));
     return { items, total, page: q.page, limit: q.limit };
   }
 
@@ -378,7 +525,10 @@ export class OrdersService {
   }
 }
 
-export function wrongState(order: { status: OrderStatus; paymentStatus: PaymentStatus }, action: string) {
+export function wrongState(
+  order: { status: OrderStatus; paymentStatus: PaymentStatus },
+  action: string,
+) {
   return new ConflictException(
     `Order is ${order.status} / ${order.paymentStatus} and cannot be ${action}`,
   );
@@ -387,6 +537,7 @@ export function wrongState(order: { status: OrderStatus; paymentStatus: PaymentS
 /** The same product twice in the cart becomes one line. */
 function mergeItems(items: OrderItemDto[]) {
   const merged = new Map<string, number>();
-  for (const i of items) merged.set(i.productId, (merged.get(i.productId) ?? 0) + i.quantity);
+  for (const i of items)
+    merged.set(i.productId, (merged.get(i.productId) ?? 0) + i.quantity);
   return [...merged].map(([productId, quantity]) => ({ productId, quantity }));
 }

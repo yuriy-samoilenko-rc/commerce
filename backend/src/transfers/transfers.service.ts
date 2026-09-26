@@ -7,7 +7,13 @@ import {
 import { formatTransferNumber } from '../common/document-numbers';
 import { pageArgs } from '../common/dto/pagination-query.dto';
 import { LONG_TX } from '../common/transactions';
-import { Prisma, StockMovementType, TransferStatus } from '../generated/prisma/client';
+import {
+  DocumentType,
+  Prisma,
+  StockMovementType,
+  TransferStatus,
+} from '../generated/prisma/client';
+import { DocumentsService } from '../documents/documents.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { cleanSerials, validateDocumentItems } from '../stock/document-items';
 import { StockLedgerService, Tx } from '../stock/stock-ledger.service';
@@ -37,7 +43,9 @@ const detailSelect = {
       id: true,
       quantity: true,
       serialNumbers: true,
-      product: { select: { id: true, name: true, sku: true, trackSerial: true } },
+      product: {
+        select: { id: true, name: true, sku: true, trackSerial: true },
+      },
     },
     orderBy: { id: 'asc' },
   },
@@ -56,6 +64,7 @@ export class TransfersService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly ledger: StockLedgerService,
+    private readonly documents: DocumentsService,
   ) {}
 
   async list(q: TransferQueryDto) {
@@ -65,7 +74,12 @@ export class TransfersService {
       toWarehouseId: q.toWarehouseId,
     };
     const [rows, total] = await this.prisma.$transaction([
-      this.prisma.transfer.findMany({ where, select: detailSelect, orderBy: { number: 'desc' }, ...pageArgs(q) }),
+      this.prisma.transfer.findMany({
+        where,
+        select: detailSelect,
+        orderBy: { number: 'desc' },
+        ...pageArgs(q),
+      }),
       this.prisma.transfer.count({ where }),
     ]);
     const items = rows.map((r) => {
@@ -76,7 +90,10 @@ export class TransfersService {
   }
 
   async findOne(id: string) {
-    const t = await this.prisma.transfer.findUnique({ where: { id }, select: detailSelect });
+    const t = await this.prisma.transfer.findUnique({
+      where: { id },
+      select: detailSelect,
+    });
     if (!t) throw new NotFoundException('Transfer not found');
     return present(t);
   }
@@ -84,10 +101,18 @@ export class TransfersService {
   async create(dto: CreateTransferDto, userId: string) {
     const { items, ...header } = dto;
     const created = await this.prisma.$transaction(async (tx) => {
-      await this.validateRoute(tx, header.fromWarehouseId, header.toWarehouseId);
+      await this.validateRoute(
+        tx,
+        header.fromWarehouseId,
+        header.toWarehouseId,
+      );
       await validateDocumentItems(tx, items, { allowArchived: true });
       return tx.transfer.create({
-        data: { ...header, createdById: userId, items: { create: items.map(toItemData) } },
+        data: {
+          ...header,
+          createdById: userId,
+          items: { create: items.map(toItemData) },
+        },
         select: { id: true },
       });
     });
@@ -114,7 +139,9 @@ export class TransfersService {
       if (items) {
         await validateDocumentItems(tx, items, { allowArchived: true });
         await tx.transferItem.deleteMany({ where: { transferId: id } });
-        await tx.transferItem.createMany({ data: items.map((i) => ({ ...toItemData(i), transferId: id })) });
+        await tx.transferItem.createMany({
+          data: items.map((i) => ({ ...toItemData(i), transferId: id })),
+        });
       }
     }, LONG_TX);
     return this.findOne(id);
@@ -125,7 +152,11 @@ export class TransfersService {
     await this.prisma.$transaction(async (tx) => {
       const { count } = await tx.transfer.updateMany({
         where: { id, status: TransferStatus.DRAFT },
-        data: { status: TransferStatus.IN_TRANSIT, sentById: userId, sentAt: new Date() },
+        data: {
+          status: TransferStatus.IN_TRANSIT,
+          sentById: userId,
+          sentAt: new Date(),
+        },
       });
       if (!count) await this.throwWrongStatus(tx, id, 'sent');
 
@@ -137,8 +168,10 @@ export class TransfersService {
           items: { orderBy: { id: 'asc' } },
         },
       });
-      if (!t.items.length) throw new BadRequestException('Transfer has no items');
-      if (!t.toWarehouse.isActive) throw new BadRequestException('Destination warehouse is inactive');
+      if (!t.items.length)
+        throw new BadRequestException('Transfer has no items');
+      if (!t.toWarehouse.isActive)
+        throw new BadRequestException('Destination warehouse is inactive');
 
       for (const item of t.items) {
         await this.ledger.move(tx, {
@@ -151,6 +184,7 @@ export class TransfersService {
           transferId: id,
         });
       }
+      await this.documents.issue(tx, DocumentType.TRANSFER_NOTE, id, userId);
     }, LONG_TX);
     return this.findOne(id);
   }
@@ -160,7 +194,11 @@ export class TransfersService {
     await this.prisma.$transaction(async (tx) => {
       const { count } = await tx.transfer.updateMany({
         where: { id, status: TransferStatus.IN_TRANSIT },
-        data: { status: TransferStatus.RECEIVED, receivedById: userId, receivedAt: new Date() },
+        data: {
+          status: TransferStatus.RECEIVED,
+          receivedById: userId,
+          receivedAt: new Date(),
+        },
       });
       if (!count) await this.throwWrongStatus(tx, id, 'received');
 
@@ -194,14 +232,24 @@ export class TransfersService {
     return this.findOne(id);
   }
 
-  private async throwWrongStatus(tx: Tx, id: string, action: string): Promise<never> {
-    const t = await tx.transfer.findUnique({ where: { id }, select: { status: true } });
+  private async throwWrongStatus(
+    tx: Tx,
+    id: string,
+    action: string,
+  ): Promise<never> {
+    const t = await tx.transfer.findUnique({
+      where: { id },
+      select: { status: true },
+    });
     if (!t) throw new NotFoundException('Transfer not found');
-    throw new ConflictException(`Transfer is ${t.status} and cannot be ${action}`);
+    throw new ConflictException(
+      `Transfer is ${t.status} and cannot be ${action}`,
+    );
   }
 
   private async validateRoute(tx: Tx, fromId: string, toId: string) {
-    if (fromId === toId) throw new BadRequestException('Source and destination must differ');
+    if (fromId === toId)
+      throw new BadRequestException('Source and destination must differ');
     const warehouses = await tx.warehouse.findMany({
       where: { id: { in: [fromId, toId] } },
       select: { id: true, isActive: true },
@@ -210,10 +258,15 @@ export class TransfersService {
     const to = warehouses.find((w) => w.id === toId);
     if (!from) throw new BadRequestException('Source warehouse not found');
     if (!to) throw new BadRequestException('Destination warehouse not found');
-    if (!to.isActive) throw new BadRequestException('Destination warehouse is inactive');
+    if (!to.isActive)
+      throw new BadRequestException('Destination warehouse is inactive');
   }
 }
 
 function toItemData(i: TransferItemDto) {
-  return { productId: i.productId, quantity: i.quantity, serialNumbers: cleanSerials(i.serialNumbers) };
+  return {
+    productId: i.productId,
+    quantity: i.quantity,
+    serialNumbers: cleanSerials(i.serialNumbers),
+  };
 }

@@ -97,6 +97,10 @@
     {
       "key": "warrantyCaseId",
       "value": ""
+    },
+    {
+      "key": "documentId",
+      "value": ""
     }
   ],
   "item": [
@@ -1755,6 +1759,141 @@
           "request": {
             "method": "GET",
             "url": "{{baseUrl}}/admin/audit-log?action=stock.adjustments.create&from=2026-09-01T00:00:00Z&to=2026-09-30T23:59:59Z"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Settings",
+      "item": [
+        {
+          "name": "Company details",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/admin/settings/company"
+          }
+        },
+        {
+          "name": "Update company details (admin)",
+          "request": {
+            "method": "PATCH",
+            "url": "{{baseUrl}}/admin/settings/company",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"legalName\": \"TechStore d.o.o.\",\n  \"address\": \"Knez Mihailova 1, 11000 Beograd\",\n  \"taxId\": \"109876543\",\n  \"registrationNumber\": \"21543210\",\n  \"bankAccount\": \"160-0000000123456-78\",\n  \"phone\": \"+381 11 123 4567\",\n  \"email\": \"info@techstore.rs\",\n  \"currency\": \"EUR\",\n  \"defaultVatPercent\": 20\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Documents (staff)",
+      "item": [
+        {
+          "name": "Registry (types: INVOICE, DELIVERY_NOTE, WARRANTY_CARD, RECEIVING_NOTE, TRANSFER_NOTE, RETURN_NOTE, INVENTORY_ACT)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const items = pm.response.json().items;",
+                  "if (items && items.length) pm.collectionVariables.set('documentId', items[0].id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/admin/documents?page=1&limit=20"
+          }
+        },
+        {
+          "name": "Invoices of an order",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const items = pm.response.json().items;",
+                  "if (items && items.length) pm.collectionVariables.set('documentId', items[0].id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/admin/documents?type=INVOICE&orderId={{orderId}}"
+          }
+        },
+        {
+          "name": "Search by number or counterparty",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/admin/documents?search=INV-2026"
+          }
+        },
+        {
+          "name": "Document data",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/admin/documents/{{documentId}}"
+          }
+        },
+        {
+          "name": "PDF (opens in Postman preview)",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/admin/documents/{{documentId}}/pdf"
+          }
+        },
+        {
+          "name": "PDF as download",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/admin/documents/{{documentId}}/pdf?download=true"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Documents (customer)",
+      "item": [
+        {
+          "name": "My documents",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const items = pm.response.json().items;",
+                  "if (items && items.length) pm.collectionVariables.set('documentId', items[0].id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/documents"
+          }
+        },
+        {
+          "name": "My documents for an order",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/documents?orderId={{orderId}}"
+          }
+        },
+        {
+          "name": "Download my document",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/documents/{{documentId}}/pdf"
           }
         }
       ]

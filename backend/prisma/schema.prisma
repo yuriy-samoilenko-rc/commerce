@@ -51,6 +51,8 @@ model User {
   returnsRefunded     Return[]         @relation("ReturnRefundedBy")
   warrantyCases       WarrantyCase[]
   auditLogs           AuditLog[]
+  documentsCreated    Document[]       @relation("DocumentCreatedBy")
+  documentsReceived   Document[]       @relation("DocumentCustomer")
 
   @@map("users")
 }
@@ -91,7 +93,8 @@ model Product {
   purchasePrice  Decimal  @db.Decimal(10, 2)
   sellingPrice   Decimal  @db.Decimal(10, 2)
   discountPrice  Decimal? @db.Decimal(10, 2)
-  vatPercent     Decimal  @default(0) @db.Decimal(5, 2)
+  // стандартная ставка ПДВ в Черногории
+  vatPercent     Decimal  @default(21) @db.Decimal(5, 2)
   weightKg       Decimal? @db.Decimal(10, 3)
   warrantyMonths Int?
   isArchived     Boolean  @default(false)
@@ -139,6 +142,7 @@ model Warehouse {
   reservations    StockReservation[]
   returns         Return[]
   warrantyCases   WarrantyCase[]
+  documents       Document[]
 
   @@map("warehouses")
 }
@@ -157,6 +161,7 @@ model Supplier {
   updatedAt     DateTime @updatedAt
 
   receivings Receiving[]
+  documents  Document[]
 
   @@map("suppliers")
 }
@@ -326,6 +331,7 @@ model Receiving {
 
   items     ReceivingItem[]
   movements StockMovement[]
+  documents Document[]
 
   @@index([status, createdAt])
   @@map("receivings")
@@ -386,6 +392,7 @@ model Transfer {
 
   items     TransferItem[]
   movements StockMovement[]
+  documents Document[]
 
   @@index([status, createdAt])
   @@index([toWarehouseId, status])
@@ -449,6 +456,7 @@ model InventoryCount {
   lines     InventoryLine[]
   serials   InventorySerial[]
   movements StockMovement[]
+  documents Document[]
 
   @@index([warehouseId, status])
   @@map("inventory_counts")
@@ -572,6 +580,7 @@ model Order {
   events    OrderEvent[]
   movements StockMovement[]
   returns   Return[]
+  documents Document[]
 
   @@index([status, reservationExpiresAt])
   @@index([userId, createdAt])
@@ -726,6 +735,7 @@ model Return {
 
   items     ReturnItem[]
   movements StockMovement[]
+  documents Document[]
 
   @@index([orderId])
   @@index([status, createdAt])
@@ -832,4 +842,112 @@ model AuditLog {
   @@index([entityType, entityId, createdAt])
   @@index([action, createdAt])
   @@map("audit_logs")
+}
+
+// --- Документы (п.11 ТЗ, Этап 4) ---
+
+// Реквизиты компании для документов (Settings → Company). Всегда одна строка с id = 1.
+model CompanySettings {
+  id                 Int      @id @default(1)
+  name               String   @default("TechStore")
+  legalName          String?
+  address            String?
+  taxId              String?
+  registrationNumber String?
+  bankAccount        String?
+  phone              String?
+  email              String?
+  website            String?
+  currency           String   @default("EUR")
+  // НДС для доставки и прочих строк без товара
+  defaultVatPercent  Decimal  @default(21) @db.Decimal(5, 2)
+  updatedAt          DateTime @updatedAt
+
+  @@map("company_settings")
+}
+
+enum DocumentType {
+  INVOICE
+  DELIVERY_NOTE
+  WARRANTY_CARD
+  RECEIVING_NOTE
+  TRANSFER_NOTE
+  RETURN_NOTE
+  INVENTORY_ACT
+}
+
+enum DocumentStatus {
+  ISSUED
+  CANCELLED
+}
+
+// Последний выданный номер по типу документа и году: INV-2026-000001, INV-2026-000002...
+model DocumentCounter {
+  type DocumentType
+  year Int
+  last Int          @default(0)
+
+  @@id([type, year])
+  @@map("document_counters")
+}
+
+// Выпущенный документ. data — полный неизменяемый снимок (реквизиты, стороны, строки, итоги),
+// из него строится PDF. Исправление = аннулирование и новый документ, а не правка.
+model Document {
+  id       String         @id @default(uuid())
+  type     DocumentType
+  number   String         @unique
+  year     Int
+  seq      Int
+  status   DocumentStatus @default(ISSUED)
+  issuedAt DateTime       @default(now())
+
+  cancelledAt  DateTime?
+  cancelReason String?
+
+  title            String
+  counterpartyName String?
+  total            Decimal? @db.Decimal(12, 2)
+  currency         String
+  data             Json
+
+  orderId String?
+  order   Order?  @relation(fields: [orderId], references: [id])
+
+  receivingId String?
+  receiving   Receiving? @relation(fields: [receivingId], references: [id])
+
+  transferId String?
+  transfer   Transfer? @relation(fields: [transferId], references: [id])
+
+  returnId String?
+  return   Return? @relation(fields: [returnId], references: [id])
+
+  inventoryCountId String?
+  inventoryCount   InventoryCount? @relation(fields: [inventoryCountId], references: [id])
+
+  warehouseId String?
+  warehouse   Warehouse? @relation(fields: [warehouseId], references: [id])
+
+  supplierId String?
+  supplier   Supplier? @relation(fields: [supplierId], references: [id])
+
+  // покупатель с аккаунтом: может скачать свои документы
+  customerId String?
+  customer   User?   @relation("DocumentCustomer", fields: [customerId], references: [id])
+
+  createdById String?
+  createdBy   User?   @relation("DocumentCreatedBy", fields: [createdById], references: [id])
+
+  @@unique([type, year, seq])
+  @@index([type, issuedAt])
+  @@index([issuedAt])
+  @@index([orderId])
+  @@index([receivingId])
+  @@index([transferId])
+  @@index([returnId])
+  @@index([inventoryCountId])
+  @@index([supplierId])
+  @@index([customerId])
+  @@map("documents")
 }

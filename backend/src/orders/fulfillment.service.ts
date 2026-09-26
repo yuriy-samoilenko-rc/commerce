@@ -7,12 +7,14 @@ import {
 import { LONG_TX } from '../common/transactions';
 import {
   DeliveryMethod,
+  DocumentType,
   OrderEventType,
   OrderStatus,
   PaymentMethod,
   PaymentStatus,
   SerialUnitStatus,
 } from '../generated/prisma/client';
+import { DocumentsService } from '../documents/documents.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { StockLedgerService, Tx } from '../stock/stock-ledger.service';
 import { PickDto, ShipDto } from './dto/fulfillment.dto';
@@ -24,18 +26,29 @@ export class FulfillmentService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly ledger: StockLedgerService,
+    private readonly documents: DocumentsService,
     private readonly orders: OrdersService,
   ) {}
 
   async startPicking(id: string, userId: string) {
     await this.prisma.$transaction(async (tx) => {
       const order = await this.get(tx, id);
-      if (order.status !== OrderStatus.CONFIRMED) throw wrongState(order, 'picked');
+      if (order.status !== OrderStatus.CONFIRMED)
+        throw wrongState(order, 'picked');
       // Only cash-on-delivery may be prepared before the money arrives.
-      if (order.paymentStatus === PaymentStatus.UNPAID && order.paymentMethod !== PaymentMethod.CASH_ON_DELIVERY) {
+      if (
+        order.paymentStatus === PaymentStatus.UNPAID &&
+        order.paymentMethod !== PaymentMethod.CASH_ON_DELIVERY
+      ) {
         throw new ConflictException('The order must be paid before picking');
       }
-      await this.transition(tx, id, OrderStatus.CONFIRMED, { status: OrderStatus.PICKING }, 'picked');
+      await this.transition(
+        tx,
+        id,
+        OrderStatus.CONFIRMED,
+        { status: OrderStatus.PICKING },
+        'picked',
+      );
       await this.event(tx, id, OrderEventType.PICKING_STARTED, userId);
     });
     return this.orders.findForStaff(id);
@@ -57,16 +70,34 @@ export class FulfillmentService {
     const qty = dto.quantity ?? 1;
     await this.prisma.$transaction(async (tx) => {
       // Touching the order row serializes scans and keeps them from racing "complete picking".
-      await this.transition(tx, id, OrderStatus.PICKING, { updatedAt: new Date() }, 'picked');
+      await this.transition(
+        tx,
+        id,
+        OrderStatus.PICKING,
+        { updatedAt: new Date() },
+        'picked',
+      );
 
-      const unit = await tx.serialUnit.findUnique({ where: { serialNumber: code }, select: { productId: true } });
+      const unit = await tx.serialUnit.findUnique({
+        where: { serialNumber: code },
+        select: { productId: true },
+      });
       const productId =
         unit?.productId ??
-        (await tx.product.findFirst({ where: { OR: [{ barcode: code }, { sku: code }] }, select: { id: true } }))?.id;
+        (
+          await tx.product.findFirst({
+            where: { OR: [{ barcode: code }, { sku: code }] },
+            select: { id: true },
+          })
+        )?.id;
       if (!productId) throw new NotFoundException(`Unknown code "${code}"`);
 
       const res = await tx.stockReservation.findFirst({
-        where: { orderItem: { orderId: id, productId }, warehouseId: dto.warehouseId, releasedAt: null },
+        where: {
+          orderItem: { orderId: id, productId },
+          warehouseId: dto.warehouseId,
+          releasedAt: null,
+        },
         select: {
           id: true,
           quantity: true,
@@ -76,13 +107,20 @@ export class FulfillmentService {
         },
       });
       if (!res) {
-        throw new BadRequestException('This product is not to be picked from this warehouse for this order');
+        throw new BadRequestException(
+          'This product is not to be picked from this warehouse for this order',
+        );
       }
       const { name, trackSerial } = res.product;
       if (trackSerial && !unit) {
-        throw new BadRequestException(`"${name}" is picked by serial number: scan the serial, not the barcode`);
+        throw new BadRequestException(
+          `"${name}" is picked by serial number: scan the serial, not the barcode`,
+        );
       }
-      if (trackSerial && qty !== 1) throw new BadRequestException('A serial number is always exactly one unit');
+      if (trackSerial && qty !== 1)
+        throw new BadRequestException(
+          'A serial number is always exactly one unit',
+        );
 
       // The bound in WHERE keeps picked within 0..quantity even with parallel scans.
       const { count } = await tx.stockReservation.updateMany({
@@ -117,13 +155,29 @@ export class FulfillmentService {
 
   async completePicking(id: string, userId: string) {
     await this.prisma.$transaction(async (tx) => {
-      await this.transition(tx, id, OrderStatus.PICKING, { status: OrderStatus.READY_TO_SHIP }, 'marked as picked');
+      await this.transition(
+        tx,
+        id,
+        OrderStatus.PICKING,
+        { status: OrderStatus.READY_TO_SHIP },
+        'marked as picked',
+      );
       const unfinished = await tx.stockReservation.findMany({
-        where: { orderItem: { orderId: id }, releasedAt: null, pickedQuantity: { lt: tx.stockReservation.fields.quantity } },
-        select: { quantity: true, pickedQuantity: true, product: { select: { name: true } } },
+        where: {
+          orderItem: { orderId: id },
+          releasedAt: null,
+          pickedQuantity: { lt: tx.stockReservation.fields.quantity },
+        },
+        select: {
+          quantity: true,
+          pickedQuantity: true,
+          product: { select: { name: true } },
+        },
       });
       if (unfinished.length) {
-        const list = unfinished.map((r) => `"${r.product.name}" ${r.pickedQuantity}/${r.quantity}`).join(', ');
+        const list = unfinished
+          .map((r) => `"${r.product.name}" ${r.pickedQuantity}/${r.quantity}`)
+          .join(', ');
         throw new ConflictException(`Not everything is picked: ${list}`);
       }
       await this.event(tx, id, OrderEventType.PICKING_COMPLETED, userId);
@@ -138,10 +192,13 @@ export class FulfillmentService {
   async ship(id: string, dto: ShipDto, userId: string) {
     await this.prisma.$transaction(async (tx) => {
       const order = await this.get(tx, id);
-      if (order.status !== OrderStatus.READY_TO_SHIP) throw wrongState(order, 'shipped');
+      if (order.status !== OrderStatus.READY_TO_SHIP)
+        throw wrongState(order, 'shipped');
       const pickup = order.deliveryMethod === DeliveryMethod.PICKUP;
       if (pickup && order.paymentStatus === PaymentStatus.UNPAID) {
-        throw new ConflictException('Take the payment before handing the order to the customer');
+        throw new ConflictException(
+          'Take the payment before handing the order to the customer',
+        );
       }
 
       const now = new Date();
@@ -159,17 +216,33 @@ export class FulfillmentService {
         'shipped',
       );
       await this.ledger.shipOrder(tx, id, userId, now);
+      await this.documents.issue(tx, DocumentType.DELIVERY_NOTE, id, userId);
+      await this.documents.issue(tx, DocumentType.WARRANTY_CARD, id, userId);
 
-      const note = [dto.carrier, dto.trackingNumber].filter(Boolean).join(' ') || null;
+      const note =
+        [dto.carrier, dto.trackingNumber].filter(Boolean).join(' ') || null;
       await this.event(tx, id, OrderEventType.SHIPPED, userId, note);
-      if (pickup) await this.event(tx, id, OrderEventType.DELIVERED, userId, 'Picked up at the store');
+      if (pickup)
+        await this.event(
+          tx,
+          id,
+          OrderEventType.DELIVERED,
+          userId,
+          'Picked up at the store',
+        );
     }, LONG_TX);
     return this.orders.findForStaff(id);
   }
 
   async deliver(id: string, userId: string) {
     await this.prisma.$transaction(async (tx) => {
-      await this.transition(tx, id, OrderStatus.SHIPPED, { status: OrderStatus.DELIVERED, deliveredAt: new Date() }, 'delivered');
+      await this.transition(
+        tx,
+        id,
+        OrderStatus.SHIPPED,
+        { status: OrderStatus.DELIVERED, deliveredAt: new Date() },
+        'delivered',
+      );
       await this.event(tx, id, OrderEventType.DELIVERED, userId);
     });
     return this.orders.findForStaff(id);
@@ -178,11 +251,18 @@ export class FulfillmentService {
   async complete(id: string, userId: string) {
     await this.prisma.$transaction(async (tx) => {
       const order = await this.get(tx, id);
-      if (order.status === OrderStatus.DELIVERED && order.paymentStatus === PaymentStatus.UNPAID) {
+      if (
+        order.status === OrderStatus.DELIVERED &&
+        order.paymentStatus === PaymentStatus.UNPAID
+      ) {
         throw new ConflictException('The order is not paid yet');
       }
       const { count } = await tx.order.updateMany({
-        where: { id, status: OrderStatus.DELIVERED, paymentStatus: PaymentStatus.PAID },
+        where: {
+          id,
+          status: OrderStatus.DELIVERED,
+          paymentStatus: PaymentStatus.PAID,
+        },
         data: { status: OrderStatus.COMPLETED, completedAt: new Date() },
       });
       if (!count) throw wrongState(await this.get(tx, id), 'completed');
@@ -195,7 +275,14 @@ export class FulfillmentService {
   async pickSheet(id: string, warehouseId?: string) {
     const order = await this.prisma.order.findUnique({
       where: { id },
-      select: { id: true, number: true, status: true, customerName: true, deliveryMethod: true, comment: true },
+      select: {
+        id: true,
+        number: true,
+        status: true,
+        customerName: true,
+        deliveryMethod: true,
+        comment: true,
+      },
     });
     if (!order) throw new NotFoundException('Order not found');
 
@@ -207,12 +294,23 @@ export class FulfillmentService {
           pickedQuantity: true,
           orderItemId: true,
           warehouse: { select: { id: true, name: true } },
-          product: { select: { id: true, name: true, sku: true, barcode: true, trackSerial: true } },
+          product: {
+            select: {
+              id: true,
+              name: true,
+              sku: true,
+              barcode: true,
+              trackSerial: true,
+            },
+          },
         },
         orderBy: { product: { name: 'asc' } },
       }),
       this.prisma.serialUnit.findMany({
-        where: { orderItem: { orderId: id }, status: SerialUnitStatus.IN_STOCK },
+        where: {
+          orderItem: { orderId: id },
+          status: SerialUnitStatus.IN_STOCK,
+        },
         select: { serialNumber: true, orderItemId: true, warehouseId: true },
       }),
     ]);
@@ -225,7 +323,11 @@ export class FulfillmentService {
       remaining: r.quantity - r.pickedQuantity,
       ...(r.product.trackSerial && {
         serialNumbers: units
-          .filter((u) => u.orderItemId === r.orderItemId && u.warehouseId === r.warehouse.id)
+          .filter(
+            (u) =>
+              u.orderItemId === r.orderItemId &&
+              u.warehouseId === r.warehouse.id,
+          )
           .map((u) => u.serialNumber),
       }),
     }));
@@ -236,14 +338,24 @@ export class FulfillmentService {
   async pickingTasks(warehouseId?: string) {
     const active = { releasedAt: null, ...(warehouseId && { warehouseId }) };
     const orders = await this.prisma.order.findMany({
-      where: { status: OrderStatus.PICKING, items: { some: { reservations: { some: active } } } },
+      where: {
+        status: OrderStatus.PICKING,
+        items: { some: { reservations: { some: active } } },
+      },
       select: {
         id: true,
         number: true,
         customerName: true,
         deliveryMethod: true,
         createdAt: true,
-        items: { select: { reservations: { where: active, select: { quantity: true, pickedQuantity: true } } } },
+        items: {
+          select: {
+            reservations: {
+              where: active,
+              select: { quantity: true, pickedQuantity: true },
+            },
+          },
+        },
       },
       orderBy: { number: 'asc' },
     });
@@ -260,7 +372,12 @@ export class FulfillmentService {
   private async get(tx: Tx, id: string) {
     const order = await tx.order.findUnique({
       where: { id },
-      select: { status: true, paymentStatus: true, paymentMethod: true, deliveryMethod: true },
+      select: {
+        status: true,
+        paymentStatus: true,
+        paymentMethod: true,
+        deliveryMethod: true,
+      },
     });
     if (!order) throw new NotFoundException('Order not found');
     return order;
@@ -273,11 +390,20 @@ export class FulfillmentService {
     data: Parameters<Tx['order']['updateMany']>[0]['data'],
     action: string,
   ) {
-    const { count } = await tx.order.updateMany({ where: { id, status: from }, data });
+    const { count } = await tx.order.updateMany({
+      where: { id, status: from },
+      data,
+    });
     if (!count) throw wrongState(await this.get(tx, id), action);
   }
 
-  private event(tx: Tx, orderId: string, type: OrderEventType, userId: string, note: string | null = null) {
+  private event(
+    tx: Tx,
+    orderId: string,
+    type: OrderEventType,
+    userId: string,
+    note: string | null = null,
+  ) {
     return tx.orderEvent.create({ data: { orderId, type, userId, note } });
   }
 }

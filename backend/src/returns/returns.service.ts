@@ -5,9 +5,13 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { formatReturnNumber } from '../common/document-numbers';
-import { pageArgs, PaginationQueryDto } from '../common/dto/pagination-query.dto';
+import {
+  pageArgs,
+  PaginationQueryDto,
+} from '../common/dto/pagination-query.dto';
 import { LONG_TX } from '../common/transactions';
 import {
+  DocumentType,
   OrderEventType,
   OrderStatus,
   PaymentStatus,
@@ -18,6 +22,7 @@ import {
   SerialUnitStatus,
   StockMovementType,
 } from '../generated/prisma/client';
+import { DocumentsService } from '../documents/documents.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { cleanSerials } from '../stock/document-items';
 import { StockLedgerService, Tx } from '../stock/stock-ledger.service';
@@ -29,9 +34,18 @@ import {
   ReturnQueryDto,
 } from './dto/return.dto';
 
-const RETURNABLE_ORDER: OrderStatus[] = [OrderStatus.DELIVERED, OrderStatus.COMPLETED, OrderStatus.PARTIALLY_RETURNED];
+const RETURNABLE_ORDER: OrderStatus[] = [
+  OrderStatus.DELIVERED,
+  OrderStatus.COMPLETED,
+  OrderStatus.PARTIALLY_RETURNED,
+];
 /** Returns that still claim their units (not cancelled, not rejected as a whole). */
-const ACTIVE_RETURN: ReturnStatus[] = [ReturnStatus.REQUESTED, ReturnStatus.RECEIVED, ReturnStatus.APPROVED, ReturnStatus.REFUNDED];
+const ACTIVE_RETURN: ReturnStatus[] = [
+  ReturnStatus.REQUESTED,
+  ReturnStatus.RECEIVED,
+  ReturnStatus.APPROVED,
+  ReturnStatus.REFUNDED,
+];
 const NOT_REJECTED: Prisma.ReturnItemWhereInput = {
   OR: [{ decision: null }, { decision: { not: ReturnDecision.REJECT } }],
 };
@@ -49,7 +63,9 @@ const itemSelect = {
   reasonNote: true,
   decision: true,
   inspectionNote: true,
-  orderItem: { select: { id: true, productName: true, sku: true, unitPrice: true } },
+  orderItem: {
+    select: { id: true, productName: true, sku: true, unitPrice: true },
+  },
 } satisfies Prisma.ReturnItemSelect;
 
 const baseSelect = {
@@ -75,7 +91,15 @@ const staffSelect = {
   receivedBy: person,
   decidedBy: person,
   refundedBy: person,
-  order: { select: { id: true, number: true, customerName: true, customerPhone: true, paymentStatus: true } },
+  order: {
+    select: {
+      id: true,
+      number: true,
+      customerName: true,
+      customerPhone: true,
+      paymentStatus: true,
+    },
+  },
 } satisfies Prisma.ReturnSelect;
 
 type Actor = { id: string; customer: boolean };
@@ -85,6 +109,7 @@ export class ReturnsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly ledger: StockLedgerService,
+    private readonly documents: DocumentsService,
   ) {}
 
   async create(orderId: string, dto: CreateReturnDto, actor: Actor) {
@@ -100,9 +125,16 @@ export class ReturnsService {
         select: { status: true, deliveredAt: true },
       });
       if (!RETURNABLE_ORDER.includes(order.status)) {
-        throw new ConflictException(`Order is ${order.status}; only delivered orders can be returned`);
+        throw new ConflictException(
+          `Order is ${order.status}; only delivered orders can be returned`,
+        );
       }
-      const productOf = await this.validateLines(tx, orderId, order.deliveredAt, dto.items);
+      const productOf = await this.validateLines(
+        tx,
+        orderId,
+        order.deliveredAt,
+        dto.items,
+      );
 
       const created = await tx.return.create({
         data: {
@@ -124,29 +156,47 @@ export class ReturnsService {
       });
       return created.id;
     });
-    return actor.customer ? this.findForCustomer(id, actor.id) : this.findForStaff(id);
+    return actor.customer
+      ? this.findForCustomer(id, actor.id)
+      : this.findForStaff(id);
   }
 
   /** Goods physically arrived. Serial units wait for inspection; nothing is on sale yet. */
   async receive(id: string, warehouseId: string, userId: string) {
     await this.prisma.$transaction(async (tx) => {
-      const warehouse = await tx.warehouse.findUnique({ where: { id: warehouseId }, select: { isActive: true } });
-      if (!warehouse?.isActive) throw new BadRequestException('Warehouse not found or inactive');
-      await this.transition(tx, id, [ReturnStatus.REQUESTED], {
-        status: ReturnStatus.RECEIVED,
-        warehouseId,
-        receivedById: userId,
-        receivedAt: new Date(),
-      }, 'received');
+      const warehouse = await tx.warehouse.findUnique({
+        where: { id: warehouseId },
+        select: { isActive: true },
+      });
+      if (!warehouse?.isActive)
+        throw new BadRequestException('Warehouse not found or inactive');
+      await this.transition(
+        tx,
+        id,
+        [ReturnStatus.REQUESTED],
+        {
+          status: ReturnStatus.RECEIVED,
+          warehouseId,
+          receivedById: userId,
+          receivedAt: new Date(),
+        },
+        'received',
+      );
 
       for (const item of await this.lines(tx, id)) {
         if (!item.serialNumbers.length) continue;
         const { count } = await tx.serialUnit.updateMany({
-          where: { serialNumber: { in: item.serialNumbers }, orderItemId: item.orderItemId, status: SerialUnitStatus.SOLD },
+          where: {
+            serialNumber: { in: item.serialNumbers },
+            orderItemId: item.orderItemId,
+            status: SerialUnitStatus.SOLD,
+          },
           data: { status: SerialUnitStatus.RETURNED, warehouseId },
         });
         if (count !== item.serialNumbers.length) {
-          throw new ConflictException('Some returned units are no longer in the SOLD state, check the serial numbers');
+          throw new ConflictException(
+            'Some returned units are no longer in the SOLD state, check the serial numbers',
+          );
         }
       }
     });
@@ -156,13 +206,22 @@ export class ReturnsService {
   /** Inspection results; can be revised until the return is approved. */
   async decide(id: string, dto: DecideReturnDto) {
     await this.prisma.$transaction(async (tx) => {
-      await this.transition(tx, id, [ReturnStatus.RECEIVED], { updatedAt: new Date() }, 'inspected');
+      await this.transition(
+        tx,
+        id,
+        [ReturnStatus.RECEIVED],
+        { updatedAt: new Date() },
+        'inspected',
+      );
       for (const d of dto.items) {
         const { count } = await tx.returnItem.updateMany({
           where: { id: d.itemId, returnId: id },
           data: { decision: d.decision, inspectionNote: d.note ?? null },
         });
-        if (!count) throw new BadRequestException(`Line ${d.itemId} is not part of this return`);
+        if (!count)
+          throw new BadRequestException(
+            `Line ${d.itemId} is not part of this return`,
+          );
       }
     });
     return this.findForStaff(id);
@@ -173,27 +232,49 @@ export class ReturnsService {
     await this.prisma.$transaction(async (tx) => {
       const ret = await tx.return.findUnique({
         where: { id },
-        select: { status: true, number: true, orderId: true, warehouseId: true },
+        select: {
+          status: true,
+          number: true,
+          orderId: true,
+          warehouseId: true,
+        },
       });
       if (!ret) throw new NotFoundException('Return not found');
       const lines = await this.lines(tx, id);
-      if (ret.status === ReturnStatus.RECEIVED && lines.some((l) => !l.decision)) {
+      if (
+        ret.status === ReturnStatus.RECEIVED &&
+        lines.some((l) => !l.decision)
+      ) {
         throw new ConflictException('Decide every line before approving');
       }
-      const accepted = lines.filter((l) => l.decision !== ReturnDecision.REJECT);
+      const accepted = lines.filter(
+        (l) => l.decision !== ReturnDecision.REJECT,
+      );
       const refundAmount = accepted.reduce(
         (sum, l) => sum.add(l.orderItem.unitPrice.mul(l.quantity)),
         new Prisma.Decimal(0),
       );
-      await this.transition(tx, id, [ReturnStatus.RECEIVED], {
-        status: accepted.length ? ReturnStatus.APPROVED : ReturnStatus.REJECTED,
-        refundAmount: accepted.length ? refundAmount : null,
-        decidedById: userId,
-        decidedAt: new Date(),
-      }, 'approved');
+      await this.transition(
+        tx,
+        id,
+        [ReturnStatus.RECEIVED],
+        {
+          status: accepted.length
+            ? ReturnStatus.APPROVED
+            : ReturnStatus.REJECTED,
+          refundAmount: accepted.length ? refundAmount : null,
+          decidedById: userId,
+          decidedAt: new Date(),
+        },
+        'approved',
+      );
 
       for (const line of lines) {
-        const units = { serialNumber: { in: line.serialNumbers }, orderItemId: line.orderItemId, status: SerialUnitStatus.RETURNED };
+        const units = {
+          serialNumber: { in: line.serialNumbers },
+          orderItemId: line.orderItemId,
+          status: SerialUnitStatus.RETURNED,
+        };
         if (line.decision === ReturnDecision.RESTOCK) {
           await this.ledger.move(tx, {
             type: StockMovementType.RETURN,
@@ -201,7 +282,8 @@ export class ReturnsService {
             warehouseId: ret.warehouseId!,
             quantity: line.quantity,
             serialNumbers: line.serialNumbers,
-            reason: line.inspectionNote ?? `Return ${formatReturnNumber(ret.number)}`,
+            reason:
+              line.inspectionNote ?? `Return ${formatReturnNumber(ret.number)}`,
             userId,
             returnId: id,
           });
@@ -217,24 +299,43 @@ export class ReturnsService {
         }
       }
 
-      if (accepted.length) await this.updateOrderStatus(tx, ret.orderId, formatReturnNumber(ret.number), userId);
+      if (accepted.length) {
+        await this.updateOrderStatus(
+          tx,
+          ret.orderId,
+          formatReturnNumber(ret.number),
+          userId,
+        );
+        await this.documents.issue(tx, DocumentType.RETURN_NOTE, id, userId);
+      }
     }, LONG_TX);
     return this.findForStaff(id);
   }
 
   async refund(id: string, dto: RefundDto, userId: string) {
     await this.prisma.$transaction(async (tx) => {
-      const ret = await tx.return.findUnique({ where: { id }, select: { order: { select: { paymentStatus: true } } } });
+      const ret = await tx.return.findUnique({
+        where: { id },
+        select: { order: { select: { paymentStatus: true } } },
+      });
       if (!ret) throw new NotFoundException('Return not found');
       if (ret.order.paymentStatus !== PaymentStatus.PAID) {
-        throw new ConflictException('The order was never paid, there is nothing to refund');
+        throw new ConflictException(
+          'The order was never paid, there is nothing to refund',
+        );
       }
-      await this.transition(tx, id, [ReturnStatus.APPROVED], {
-        status: ReturnStatus.REFUNDED,
-        refundReference: dto.reference ?? null,
-        refundedById: userId,
-        refundedAt: new Date(),
-      }, 'refunded');
+      await this.transition(
+        tx,
+        id,
+        [ReturnStatus.APPROVED],
+        {
+          status: ReturnStatus.REFUNDED,
+          refundReference: dto.reference ?? null,
+          refundedById: userId,
+          refundedAt: new Date(),
+        },
+        'refunded',
+      );
     });
     return this.findForStaff(id);
   }
@@ -243,24 +344,41 @@ export class ReturnsService {
   async cancel(id: string, actor: Actor) {
     await this.prisma.$transaction(async (tx) => {
       if (actor.customer) {
-        const own = await tx.return.findFirst({ where: { id, order: { userId: actor.id } }, select: { id: true } });
+        const own = await tx.return.findFirst({
+          where: { id, order: { userId: actor.id } },
+          select: { id: true },
+        });
         if (!own) throw new NotFoundException('Return not found');
       }
-      await this.transition(tx, id, [ReturnStatus.REQUESTED], { status: ReturnStatus.CANCELLED }, 'cancelled');
+      await this.transition(
+        tx,
+        id,
+        [ReturnStatus.REQUESTED],
+        { status: ReturnStatus.CANCELLED },
+        'cancelled',
+      );
     });
-    return actor.customer ? this.findForCustomer(id, actor.id) : this.findForStaff(id);
+    return actor.customer
+      ? this.findForCustomer(id, actor.id)
+      : this.findForStaff(id);
   }
 
   // ---------- reading ----------
 
   async findForStaff(id: string) {
-    const r = await this.prisma.return.findUnique({ where: { id }, select: staffSelect });
+    const r = await this.prisma.return.findUnique({
+      where: { id },
+      select: staffSelect,
+    });
     if (!r) throw new NotFoundException('Return not found');
     return { ...r, number: formatReturnNumber(r.number) };
   }
 
   async findForCustomer(id: string, userId: string) {
-    const r = await this.prisma.return.findFirst({ where: { id, order: { userId } }, select: baseSelect });
+    const r = await this.prisma.return.findFirst({
+      where: { id, order: { userId } },
+      select: baseSelect,
+    });
     if (!r) throw new NotFoundException('Return not found');
     return { ...r, number: formatReturnNumber(r.number) };
   }
@@ -273,43 +391,81 @@ export class ReturnsService {
     return this.list({ order: { userId } }, q, baseSelect);
   }
 
-  private async list(where: Prisma.ReturnWhereInput, q: PaginationQueryDto, select: typeof baseSelect) {
+  private async list(
+    where: Prisma.ReturnWhereInput,
+    q: PaginationQueryDto,
+    select: typeof baseSelect,
+  ) {
     const [rows, total] = await this.prisma.$transaction([
-      this.prisma.return.findMany({ where, select, orderBy: { number: 'desc' }, ...pageArgs(q) }),
+      this.prisma.return.findMany({
+        where,
+        select,
+        orderBy: { number: 'desc' },
+        ...pageArgs(q),
+      }),
       this.prisma.return.count({ where }),
     ]);
-    return { items: rows.map((r) => ({ ...r, number: formatReturnNumber(r.number) })), total, page: q.page, limit: q.limit };
+    return {
+      items: rows.map((r) => ({ ...r, number: formatReturnNumber(r.number) })),
+      total,
+      page: q.page,
+      limit: q.limit,
+    };
   }
 
   // ---------- helpers ----------
 
   /** Checks what may still be returned; returns orderItemId → productId. */
-  private async validateLines(tx: Tx, orderId: string, deliveredAt: Date | null, lines: ReturnLineDto[]) {
+  private async validateLines(
+    tx: Tx,
+    orderId: string,
+    deliveredAt: Date | null,
+    lines: ReturnLineDto[],
+  ) {
     const ids = lines.map((l) => l.orderItemId);
-    if (new Set(ids).size !== ids.length) throw new BadRequestException('Each order line may appear only once');
+    if (new Set(ids).size !== ids.length)
+      throw new BadRequestException('Each order line may appear only once');
 
     const orderItems = await tx.orderItem.findMany({
       where: { id: { in: ids }, orderId },
-      select: { id: true, productId: true, quantity: true, productName: true, product: { select: { trackSerial: true } } },
+      select: {
+        id: true,
+        productId: true,
+        quantity: true,
+        productName: true,
+        product: { select: { trackSerial: true } },
+      },
     });
     const claimed = await tx.returnItem.findMany({
-      where: { orderItemId: { in: ids }, return: { status: { in: ACTIVE_RETURN } }, ...NOT_REJECTED },
+      where: {
+        orderItemId: { in: ids },
+        return: { status: { in: ACTIVE_RETURN } },
+        ...NOT_REJECTED,
+      },
       select: { orderItemId: true, quantity: true, serialNumbers: true },
     });
 
     for (const line of lines) {
       const oi = orderItems.find((i) => i.id === line.orderItemId);
-      if (!oi) throw new BadRequestException(`Line ${line.orderItemId} is not part of this order`);
+      if (!oi)
+        throw new BadRequestException(
+          `Line ${line.orderItemId} is not part of this order`,
+        );
 
       const already = claimed.filter((c) => c.orderItemId === oi.id);
       const left = oi.quantity - already.reduce((s, c) => s + c.quantity, 0);
       if (line.quantity > left) {
-        throw new ConflictException(`Only ${left} of "${oi.productName}" can still be returned`);
+        throw new ConflictException(
+          `Only ${left} of "${oi.productName}" can still be returned`,
+        );
       }
 
       if (line.reason === ReturnReason.CHANGED_MIND) {
         const days = returnWindowDays();
-        if (!deliveredAt || Date.now() - deliveredAt.getTime() > days * 86_400_000) {
+        if (
+          !deliveredAt ||
+          Date.now() - deliveredAt.getTime() > days * 86_400_000
+        ) {
           throw new ConflictException(
             `The ${days}-day return period for "${oi.productName}" has passed; defects are handled under warranty`,
           );
@@ -318,31 +474,55 @@ export class ReturnsService {
 
       const serials = cleanSerials(line.serialNumbers);
       if (!oi.product.trackSerial) {
-        if (serials.length) throw new BadRequestException(`"${oi.productName}" is not tracked by serial number`);
+        if (serials.length)
+          throw new BadRequestException(
+            `"${oi.productName}" is not tracked by serial number`,
+          );
         continue;
       }
-      if (serials.length !== line.quantity || new Set(serials).size !== serials.length) {
-        throw new BadRequestException(`"${oi.productName}": list exactly ${line.quantity} distinct serial numbers`);
+      if (
+        serials.length !== line.quantity ||
+        new Set(serials).size !== serials.length
+      ) {
+        throw new BadRequestException(
+          `"${oi.productName}": list exactly ${line.quantity} distinct serial numbers`,
+        );
       }
       const inReturn = new Set(already.flatMap((c) => c.serialNumbers));
       const sold = await tx.serialUnit.findMany({
-        where: { serialNumber: { in: serials }, orderItemId: oi.id, status: SerialUnitStatus.SOLD },
+        where: {
+          serialNumber: { in: serials },
+          orderItemId: oi.id,
+          status: SerialUnitStatus.SOLD,
+        },
         select: { serialNumber: true },
       });
-      const bad = serials.filter((sn) => inReturn.has(sn) || !sold.some((u) => u.serialNumber === sn));
+      const bad = serials.filter(
+        (sn) => inReturn.has(sn) || !sold.some((u) => u.serialNumber === sn),
+      );
       if (bad.length) {
-        throw new BadRequestException(`Not sold in this order line or already being returned: ${bad.join(', ')}`);
+        throw new BadRequestException(
+          `Not sold in this order line or already being returned: ${bad.join(', ')}`,
+        );
       }
     }
     return new Map(orderItems.map((i) => [i.id, i.productId]));
   }
 
-  private async updateOrderStatus(tx: Tx, orderId: string, returnNumber: string, userId: string) {
+  private async updateOrderStatus(
+    tx: Tx,
+    orderId: string,
+    returnNumber: string,
+    userId: string,
+  ) {
     const [ordered, returned] = await Promise.all([
       tx.orderItem.aggregate({ where: { orderId }, _sum: { quantity: true } }),
       tx.returnItem.aggregate({
         where: {
-          return: { orderId, status: { in: [ReturnStatus.APPROVED, ReturnStatus.REFUNDED] } },
+          return: {
+            orderId,
+            status: { in: [ReturnStatus.APPROVED, ReturnStatus.REFUNDED] },
+          },
           decision: { not: ReturnDecision.REJECT },
         },
         _sum: { quantity: true },
@@ -351,10 +531,17 @@ export class ReturnsService {
     const all = (returned._sum.quantity ?? 0) >= (ordered._sum.quantity ?? 0);
     await tx.order.update({
       where: { id: orderId },
-      data: { status: all ? OrderStatus.RETURNED : OrderStatus.PARTIALLY_RETURNED },
+      data: {
+        status: all ? OrderStatus.RETURNED : OrderStatus.PARTIALLY_RETURNED,
+      },
     });
     await tx.orderEvent.create({
-      data: { orderId, type: OrderEventType.RETURN_APPROVED, note: returnNumber, userId },
+      data: {
+        orderId,
+        type: OrderEventType.RETURN_APPROVED,
+        note: returnNumber,
+        userId,
+      },
     });
   }
 
@@ -382,10 +569,18 @@ export class ReturnsService {
     data: Prisma.ReturnUncheckedUpdateManyInput,
     action: string,
   ) {
-    const { count } = await tx.return.updateMany({ where: { id, status: { in: from } }, data });
+    const { count } = await tx.return.updateMany({
+      where: { id, status: { in: from } },
+      data,
+    });
     if (count) return;
-    const r = await tx.return.findUnique({ where: { id }, select: { status: true } });
+    const r = await tx.return.findUnique({
+      where: { id },
+      select: { status: true },
+    });
     if (!r) throw new NotFoundException('Return not found');
-    throw new ConflictException(`Return is ${r.status} and cannot be ${action}`);
+    throw new ConflictException(
+      `Return is ${r.status} and cannot be ${action}`,
+    );
   }
 }

@@ -6,11 +6,20 @@ import {
 } from '@nestjs/common';
 import { pageArgs } from '../common/dto/pagination-query.dto';
 import { LONG_TX } from '../common/transactions';
-import { Prisma, ReceivingStatus, StockMovementType } from '../generated/prisma/client';
+import {
+  DocumentType,
+  Prisma,
+  ReceivingStatus,
+  StockMovementType,
+} from '../generated/prisma/client';
+import { DocumentsService } from '../documents/documents.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { cleanSerials, validateDocumentItems } from '../stock/document-items';
 import { StockLedgerService, Tx } from '../stock/stock-ledger.service';
-import { CreateReceivingDto, ReceivingItemDto } from './dto/create-receiving.dto';
+import {
+  CreateReceivingDto,
+  ReceivingItemDto,
+} from './dto/create-receiving.dto';
 import { ReceivingQueryDto } from './dto/receiving-query.dto';
 import { UpdateReceivingDto } from './dto/update-receiving.dto';
 import { formatReceivingNumber } from '../common/document-numbers';
@@ -35,7 +44,9 @@ const detailSelect = {
       quantity: true,
       purchasePrice: true,
       serialNumbers: true,
-      product: { select: { id: true, name: true, sku: true, trackSerial: true } },
+      product: {
+        select: { id: true, name: true, sku: true, trackSerial: true },
+      },
     },
     orderBy: { id: 'asc' },
   },
@@ -56,12 +67,12 @@ function present(r: ReceivingRow) {
   };
 }
 
-
 @Injectable()
 export class ReceivingsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly ledger: StockLedgerService,
+    private readonly documents: DocumentsService,
   ) {}
 
   async list(q: ReceivingQueryDto) {
@@ -87,7 +98,10 @@ export class ReceivingsService {
   }
 
   async findOne(id: string) {
-    const r = await this.prisma.receiving.findUnique({ where: { id }, select: detailSelect });
+    const r = await this.prisma.receiving.findUnique({
+      where: { id },
+      select: detailSelect,
+    });
     if (!r) throw new NotFoundException('Receiving not found');
     return present(r);
   }
@@ -112,71 +126,71 @@ export class ReceivingsService {
 
   async update(id: string, dto: UpdateReceivingDto) {
     const { items, ...header } = dto;
-    await this.prisma.$transaction(
-      async (tx) => {
-        // Updating the row first locks it until commit, so a concurrent confirm waits
-        // for us and then sees the final item list (or we see its CONFIRMED status).
-        const { count } = await tx.receiving.updateMany({
-          where: { id, status: ReceivingStatus.DRAFT },
-          data: {
-            ...header,
-            supplierDocDate: toDate(header.supplierDocDate),
-            updatedAt: new Date(),
-          },
-        });
-        if (!count) await this.throwNotDraft(tx, id);
+    await this.prisma.$transaction(async (tx) => {
+      // Updating the row first locks it until commit, so a concurrent confirm waits
+      // for us and then sees the final item list (or we see its CONFIRMED status).
+      const { count } = await tx.receiving.updateMany({
+        where: { id, status: ReceivingStatus.DRAFT },
+        data: {
+          ...header,
+          supplierDocDate: toDate(header.supplierDocDate),
+          updatedAt: new Date(),
+        },
+      });
+      if (!count) await this.throwNotDraft(tx, id);
 
-        if (header.supplierId || header.warehouseId) {
-          const current = await tx.receiving.findUniqueOrThrow({
-            where: { id },
-            select: { supplierId: true, warehouseId: true },
-          });
-          await this.validateHeader(tx, current.supplierId, current.warehouseId);
-        }
-        if (items) {
-          await validateDocumentItems(tx, items, { allowArchived: false });
-          await tx.receivingItem.deleteMany({ where: { receivingId: id } });
-          await tx.receivingItem.createMany({
-            data: items.map((i) => ({ ...toItemData(i), receivingId: id })),
-          });
-        }
-      },
-      LONG_TX,
-    );
+      if (header.supplierId || header.warehouseId) {
+        const current = await tx.receiving.findUniqueOrThrow({
+          where: { id },
+          select: { supplierId: true, warehouseId: true },
+        });
+        await this.validateHeader(tx, current.supplierId, current.warehouseId);
+      }
+      if (items) {
+        await validateDocumentItems(tx, items, { allowArchived: false });
+        await tx.receivingItem.deleteMany({ where: { receivingId: id } });
+        await tx.receivingItem.createMany({
+          data: items.map((i) => ({ ...toItemData(i), receivingId: id })),
+        });
+      }
+    }, LONG_TX);
     return this.findOne(id);
   }
 
   async confirm(id: string, userId: string) {
-    await this.prisma.$transaction(
-      async (tx) => {
-        // Flip the status first: only one of two simultaneous confirms can match DRAFT,
-        // so stock is never posted twice. Any error below rolls the status back too.
-        const { count } = await tx.receiving.updateMany({
-          where: { id, status: ReceivingStatus.DRAFT },
-          data: { status: ReceivingStatus.CONFIRMED, confirmedById: userId, confirmedAt: new Date() },
-        });
-        if (!count) await this.throwNotDraft(tx, id);
+    await this.prisma.$transaction(async (tx) => {
+      // Flip the status first: only one of two simultaneous confirms can match DRAFT,
+      // so stock is never posted twice. Any error below rolls the status back too.
+      const { count } = await tx.receiving.updateMany({
+        where: { id, status: ReceivingStatus.DRAFT },
+        data: {
+          status: ReceivingStatus.CONFIRMED,
+          confirmedById: userId,
+          confirmedAt: new Date(),
+        },
+      });
+      if (!count) await this.throwNotDraft(tx, id);
 
-        const receiving = await tx.receiving.findUniqueOrThrow({
-          where: { id },
-          select: { warehouseId: true, items: { orderBy: { id: 'asc' } } },
-        });
-        if (!receiving.items.length) throw new BadRequestException('Receiving has no items');
+      const receiving = await tx.receiving.findUniqueOrThrow({
+        where: { id },
+        select: { warehouseId: true, items: { orderBy: { id: 'asc' } } },
+      });
+      if (!receiving.items.length)
+        throw new BadRequestException('Receiving has no items');
 
-        for (const item of receiving.items) {
-          await this.ledger.move(tx, {
-            type: StockMovementType.RECEIPT,
-            productId: item.productId,
-            warehouseId: receiving.warehouseId,
-            quantity: item.quantity,
-            serialNumbers: item.serialNumbers,
-            userId,
-            receivingId: id,
-          });
-        }
-      },
-      LONG_TX,
-    );
+      for (const item of receiving.items) {
+        await this.ledger.move(tx, {
+          type: StockMovementType.RECEIPT,
+          productId: item.productId,
+          warehouseId: receiving.warehouseId,
+          quantity: item.quantity,
+          serialNumbers: item.serialNumbers,
+          userId,
+          receivingId: id,
+        });
+      }
+      await this.documents.issue(tx, DocumentType.RECEIVING_NOTE, id, userId);
+    }, LONG_TX);
     return this.findOne(id);
   }
 
@@ -192,20 +206,37 @@ export class ReceivingsService {
   }
 
   private async throwNotDraft(tx: Tx, id: string): Promise<never> {
-    const r = await tx.receiving.findUnique({ where: { id }, select: { status: true } });
+    const r = await tx.receiving.findUnique({
+      where: { id },
+      select: { status: true },
+    });
     if (!r) throw new NotFoundException('Receiving not found');
-    throw new ConflictException(`Receiving is ${r.status}; only drafts can be changed`);
+    throw new ConflictException(
+      `Receiving is ${r.status}; only drafts can be changed`,
+    );
   }
 
-  private async validateHeader(tx: Tx, supplierId: string, warehouseId: string) {
+  private async validateHeader(
+    tx: Tx,
+    supplierId: string,
+    warehouseId: string,
+  ) {
     const [supplier, warehouse] = await Promise.all([
-      tx.supplier.findUnique({ where: { id: supplierId }, select: { isActive: true } }),
-      tx.warehouse.findUnique({ where: { id: warehouseId }, select: { isActive: true } }),
+      tx.supplier.findUnique({
+        where: { id: supplierId },
+        select: { isActive: true },
+      }),
+      tx.warehouse.findUnique({
+        where: { id: warehouseId },
+        select: { isActive: true },
+      }),
     ]);
     if (!supplier) throw new BadRequestException('Supplier not found');
-    if (!supplier.isActive) throw new BadRequestException('Supplier is inactive');
+    if (!supplier.isActive)
+      throw new BadRequestException('Supplier is inactive');
     if (!warehouse) throw new BadRequestException('Warehouse not found');
-    if (!warehouse.isActive) throw new BadRequestException('Warehouse is inactive');
+    if (!warehouse.isActive)
+      throw new BadRequestException('Warehouse is inactive');
   }
 }
 
