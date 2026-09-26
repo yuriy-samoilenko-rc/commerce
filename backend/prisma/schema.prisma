@@ -1,0 +1,114 @@
+// Этот файл описывает структуру базы данных.
+// Prisma сама сгенерирует SQL-миграции и типобезопасный клиент из этого описания.
+
+generator client {
+  provider     = "prisma-client"
+  output       = "../src/generated/prisma"
+  moduleFormat = "cjs"
+}
+
+// В Prisma 7 строка подключения задаётся в prisma.config.ts, а не здесь.
+datasource db {
+  provider = "postgresql"
+}
+
+// --- Этап 1: пользователи и роли ---
+
+enum Role {
+  ADMIN
+  MANAGER
+  WAREHOUSE
+  ACCOUNTANT
+  CUSTOMER
+}
+
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String
+  name         String
+  role         Role     @default(CUSTOMER)
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@map("users")
+}
+
+// --- Этап 1: товары и категории ---
+
+model Category {
+  id       String     @id @default(uuid())
+  name     String
+  parentId String?
+  parent   Category?  @relation("CategoryToCategory", fields: [parentId], references: [id])
+  children Category[] @relation("CategoryToCategory")
+  products Product[]
+
+  @@map("categories")
+}
+
+model Brand {
+  id       String    @id @default(uuid())
+  name     String    @unique
+  products Product[]
+
+  @@map("brands")
+}
+
+model Product {
+  id             String   @id @default(uuid())
+  name           String
+  sku            String   @unique
+  barcode        String?  @unique
+  description    String?
+  purchasePrice  Decimal  @db.Decimal(10, 2)
+  sellingPrice   Decimal  @db.Decimal(10, 2)
+  discountPrice  Decimal? @db.Decimal(10, 2)
+  vatPercent     Decimal  @default(0) @db.Decimal(5, 2)
+  weightKg       Decimal? @db.Decimal(10, 3)
+  warrantyMonths Int?
+  isArchived     Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  categoryId String
+  category   Category @relation(fields: [categoryId], references: [id])
+
+  brandId String?
+  brand   Brand?  @relation(fields: [brandId], references: [id])
+
+  stock Stock[]
+
+  @@map("products")
+}
+
+// --- Этап 1: склады и остатки ---
+
+model Warehouse {
+  id      String  @id @default(uuid())
+  name    String
+  address String?
+  stock   Stock[]
+
+  @@map("warehouses")
+}
+
+// Остаток товара на конкретном складе.
+// quantity — физически на складе, reserved — зарезервировано под заказы.
+// "Доступно" = quantity - reserved считается на уровне приложения, а не хранится отдельным полем,
+// чтобы не рассинхронизироваться (см. п.27 ТЗ про журнал операций).
+model Stock {
+  id       String @id @default(uuid())
+  quantity Int    @default(0)
+  reserved Int    @default(0)
+
+  productId String
+  product   Product @relation(fields: [productId], references: [id])
+
+  warehouseId String
+  warehouse   Warehouse @relation(fields: [warehouseId], references: [id])
+
+  @@unique([productId, warehouseId])
+  @@map("stock")
+}
