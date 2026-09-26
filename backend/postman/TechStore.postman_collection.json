@@ -5,14 +5,51 @@
   },
   "auth": {
     "type": "bearer",
-    "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{token}}",
+        "type": "string"
+      }
+    ]
   },
   "variable": [
-    { "key": "baseUrl", "value": "http://localhost:3000" },
-    { "key": "token", "value": "" },
-    { "key": "adminEmail", "value": "admin@techstore.local" },
-    { "key": "adminPassword", "value": "" },
-    { "key": "userId", "value": "" }
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000"
+    },
+    {
+      "key": "token",
+      "value": ""
+    },
+    {
+      "key": "adminEmail",
+      "value": "admin@techstore.local"
+    },
+    {
+      "key": "adminPassword",
+      "value": ""
+    },
+    {
+      "key": "userId",
+      "value": ""
+    },
+    {
+      "key": "categoryId",
+      "value": ""
+    },
+    {
+      "key": "subcategoryId",
+      "value": ""
+    },
+    {
+      "key": "brandId",
+      "value": ""
+    },
+    {
+      "key": "productId",
+      "value": ""
+    }
   ],
   "item": [
     {
@@ -34,9 +71,16 @@
             }
           ],
           "request": {
-            "auth": { "type": "noauth" },
+            "auth": {
+              "type": "noauth"
+            },
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "url": "{{baseUrl}}/auth/register",
             "body": {
               "mode": "raw",
@@ -59,9 +103,16 @@
             }
           ],
           "request": {
-            "auth": { "type": "noauth" },
+            "auth": {
+              "type": "noauth"
+            },
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "url": "{{baseUrl}}/auth/login",
             "body": {
               "mode": "raw",
@@ -84,9 +135,16 @@
             }
           ],
           "request": {
-            "auth": { "type": "noauth" },
+            "auth": {
+              "type": "noauth"
+            },
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "url": "{{baseUrl}}/auth/login",
             "body": {
               "mode": "raw",
@@ -96,7 +154,10 @@
         },
         {
           "name": "Me",
-          "request": { "method": "GET", "url": "{{baseUrl}}/auth/me" }
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/auth/me"
+          }
         }
       ]
     },
@@ -105,7 +166,10 @@
       "item": [
         {
           "name": "List users",
-          "request": { "method": "GET", "url": "{{baseUrl}}/users" }
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/users"
+          }
         },
         {
           "name": "Create employee",
@@ -123,7 +187,12 @@
           ],
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "url": "{{baseUrl}}/users",
             "body": {
               "mode": "raw",
@@ -133,18 +202,329 @@
         },
         {
           "name": "Get user",
-          "request": { "method": "GET", "url": "{{baseUrl}}/users/{{userId}}" }
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/users/{{userId}}"
+          }
         },
         {
           "name": "Update user (role / deactivate)",
           "request": {
             "method": "PATCH",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "url": "{{baseUrl}}/users/{{userId}}",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"role\": \"MANAGER\",\n  \"isActive\": true\n}"
             }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Categories",
+      "item": [
+        {
+          "name": "Category tree (public)",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/categories",
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Create root category",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code < 300) {",
+                  "  pm.collectionVariables.set('categoryId', pm.response.json().id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/categories",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Электроника\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Create subcategory",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code < 300) {",
+                  "  pm.collectionVariables.set('subcategoryId', pm.response.json().id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/categories",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Смартфоны\",\n  \"parentId\": \"{{categoryId}}\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Get category",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/categories/{{categoryId}}",
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Rename category",
+          "request": {
+            "method": "PATCH",
+            "url": "{{baseUrl}}/categories/{{subcategoryId}}",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Смартфоны и телефоны\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Delete category",
+          "request": {
+            "method": "DELETE",
+            "url": "{{baseUrl}}/categories/{{subcategoryId}}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Brands",
+      "item": [
+        {
+          "name": "List brands (public)",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/brands",
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Create brand",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code < 300) {",
+                  "  pm.collectionVariables.set('brandId', pm.response.json().id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/brands",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Samsung\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Update brand",
+          "request": {
+            "method": "PATCH",
+            "url": "{{baseUrl}}/brands/{{brandId}}",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Samsung Electronics\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Delete brand",
+          "request": {
+            "method": "DELETE",
+            "url": "{{baseUrl}}/brands/{{brandId}}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Products (shop, public)",
+      "item": [
+        {
+          "name": "Catalog",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/products?page=1&limit=20&sort=newest",
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Catalog: category + price + search",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/products?categoryId={{categoryId}}&minPrice=100&maxPrice=1500&search=galaxy&sort=price_asc",
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Product page",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/products/{{productId}}",
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Products (admin)",
+      "item": [
+        {
+          "name": "Create product",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code < 300) {",
+                  "  pm.collectionVariables.set('productId', pm.response.json().id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/admin/products",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Samsung Galaxy S30\",\n  \"sku\": \"SM-S30-256\",\n  \"barcode\": \"8801234567890\",\n  \"model\": \"S30\",\n  \"description\": \"Флагманский смартфон\",\n  \"attributes\": {\n    \"screen\": \"6.7\\\"\",\n    \"storageGb\": 256,\n    \"color\": \"black\"\n  },\n  \"trackSerial\": true,\n  \"purchasePrice\": 650,\n  \"sellingPrice\": 899.99,\n  \"discountPrice\": 849,\n  \"vatPercent\": 20,\n  \"weightKg\": 0.21,\n  \"warrantyMonths\": 24,\n  \"categoryId\": \"{{subcategoryId}}\",\n  \"brandId\": \"{{brandId}}\"\n}"
+            }
+          }
+        },
+        {
+          "name": "List (staff)",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/admin/products?status=active&page=1&limit=20"
+          }
+        },
+        {
+          "name": "Archived products",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/admin/products?status=archived"
+          }
+        },
+        {
+          "name": "Get product (staff)",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/admin/products/{{productId}}"
+          }
+        },
+        {
+          "name": "Scan barcode",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/admin/products/by-barcode/8801234567890"
+          }
+        },
+        {
+          "name": "Update price / remove discount",
+          "request": {
+            "method": "PATCH",
+            "url": "{{baseUrl}}/admin/products/{{productId}}",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sellingPrice\": 849.99,\n  \"discountPrice\": null\n}"
+            }
+          }
+        },
+        {
+          "name": "Archive (delete)",
+          "request": {
+            "method": "DELETE",
+            "url": "{{baseUrl}}/admin/products/{{productId}}"
+          }
+        },
+        {
+          "name": "Restore",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/admin/products/{{productId}}/restore"
           }
         }
       ]

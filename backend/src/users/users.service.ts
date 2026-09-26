@@ -1,4 +1,4 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import * as bcrypt from 'bcryptjs';
 import { Prisma, Role } from '../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
@@ -29,22 +29,15 @@ export class UsersService {
     role?: Role;
   }): Promise<PublicUser> {
     const passwordHash = await bcrypt.hash(data.password, BCRYPT_ROUNDS);
-    try {
-      return await this.prisma.user.create({
-        data: {
-          email: data.email.toLowerCase(),
-          name: data.name,
-          role: data.role,
-          passwordHash,
-        },
-        select: publicUserSelect,
-      });
-    } catch (e) {
-      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
-        throw new ConflictException('User with this email already exists');
-      }
-      throw e;
-    }
+    return this.prisma.user.create({
+      data: {
+        email: data.email.toLowerCase(),
+        name: data.name,
+        role: data.role,
+        passwordHash,
+      },
+      select: publicUserSelect,
+    });
   }
 
   findAll(): Promise<PublicUser[]> {

@@ -41,10 +41,11 @@ model Category {
   id       String     @id @default(uuid())
   name     String
   parentId String?
-  parent   Category?  @relation("CategoryToCategory", fields: [parentId], references: [id])
+  parent   Category?  @relation("CategoryToCategory", fields: [parentId], references: [id], onDelete: Restrict)
   children Category[] @relation("CategoryToCategory")
   products Product[]
 
+  @@index([parentId])
   @@map("categories")
 }
 
@@ -61,7 +62,12 @@ model Product {
   name           String
   sku            String   @unique
   barcode        String?  @unique
+  model          String?
   description    String?
+  // Free-form specs that differ per category (screen size for TVs, volume for fridges...)
+  attributes     Json     @default("{}")
+  // true for goods tracked unit by unit (serial number / IMEI), see ТЗ п.4
+  trackSerial    Boolean  @default(false)
   purchasePrice  Decimal  @db.Decimal(10, 2)
   sellingPrice   Decimal  @db.Decimal(10, 2)
   discountPrice  Decimal? @db.Decimal(10, 2)
@@ -76,10 +82,12 @@ model Product {
   category   Category @relation(fields: [categoryId], references: [id])
 
   brandId String?
-  brand   Brand?  @relation(fields: [brandId], references: [id])
+  brand   Brand?  @relation(fields: [brandId], references: [id], onDelete: Restrict)
 
   stock Stock[]
 
+  @@index([categoryId])
+  @@index([brandId])
   @@map("products")
 }
 
