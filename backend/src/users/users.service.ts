@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import * as bcrypt from 'bcryptjs';
 import { Prisma, Role } from '../generated/prisma/client';
+import { AuditService, changedKeys } from '../audit/audit.service';
 import { PrismaService } from '../prisma/prisma.service';
 
 // passwordHash never leaves the service: every read goes through this select.
@@ -10,17 +11,23 @@ export const publicUserSelect = {
   name: true,
   role: true,
   isActive: true,
+  lastLoginAt: true,
   createdAt: true,
   updatedAt: true,
 } satisfies Prisma.UserSelect;
 
-export type PublicUser = Prisma.UserGetPayload<{ select: typeof publicUserSelect }>;
+export type PublicUser = Prisma.UserGetPayload<{
+  select: typeof publicUserSelect;
+}>;
 
 const BCRYPT_ROUNDS = 12;
 
 @Injectable()
 export class UsersService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly audit: AuditService,
+  ) {}
 
   async create(data: {
     email: string;
@@ -57,13 +64,28 @@ export class UsersService {
   }
 
   findByEmailWithPassword(email: string) {
-    return this.prisma.user.findUnique({ where: { email: email.toLowerCase() } });
+    return this.prisma.user.findUnique({
+      where: { email: email.toLowerCase() },
+    });
   }
 
   update(
     id: string,
     data: { name?: string; role?: Role; isActive?: boolean },
   ): Promise<PublicUser> {
-    return this.prisma.user.update({ where: { id }, data, select: publicUserSelect });
+    return this.audit.trackUpdate(
+      () =>
+        this.prisma.user.findUnique({
+          where: { id },
+          select: publicUserSelect,
+        }),
+      () =>
+        this.prisma.user.update({
+          where: { id },
+          data,
+          select: publicUserSelect,
+        }),
+      changedKeys(data),
+    );
   }
 }

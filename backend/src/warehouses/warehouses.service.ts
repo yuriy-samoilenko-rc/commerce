@@ -1,20 +1,35 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { TransferStatus } from '../generated/prisma/client';
+import { AuditService, changedKeys } from '../audit/audit.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateWarehouseDto } from './dto/create-warehouse.dto';
 import { UpdateWarehouseDto } from './dto/update-warehouse.dto';
 
 @Injectable()
 export class WarehousesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly audit: AuditService,
+  ) {}
 
   async findAll() {
     const [warehouses, totals, inTransit] = await Promise.all([
       this.prisma.warehouse.findMany({ orderBy: { name: 'asc' } }),
-      this.prisma.stock.groupBy({ by: ['warehouseId'], _sum: { quantity: true, reserved: true } }),
+      this.prisma.stock.groupBy({
+        by: ['warehouseId'],
+        _sum: { quantity: true, reserved: true },
+      }),
       this.prisma.transfer.findMany({
         where: { status: TransferStatus.IN_TRANSIT },
-        select: { fromWarehouseId: true, toWarehouseId: true, items: { select: { quantity: true } } },
+        select: {
+          fromWarehouseId: true,
+          toWarehouseId: true,
+          items: { select: { quantity: true } },
+        },
       }),
     ]);
 
@@ -23,8 +38,14 @@ export class WarehousesService {
     const outgoing = new Map<string, number>();
     for (const t of inTransit) {
       const units = t.items.reduce((sum, i) => sum + i.quantity, 0);
-      incoming.set(t.toWarehouseId, (incoming.get(t.toWarehouseId) ?? 0) + units);
-      outgoing.set(t.fromWarehouseId, (outgoing.get(t.fromWarehouseId) ?? 0) + units);
+      incoming.set(
+        t.toWarehouseId,
+        (incoming.get(t.toWarehouseId) ?? 0) + units,
+      );
+      outgoing.set(
+        t.fromWarehouseId,
+        (outgoing.get(t.fromWarehouseId) ?? 0) + units,
+      );
     }
 
     return warehouses.map((w) => {
@@ -54,7 +75,11 @@ export class WarehousesService {
   }
 
   update(id: string, dto: UpdateWarehouseDto) {
-    return this.prisma.warehouse.update({ where: { id }, data: dto });
+    return this.audit.trackUpdate(
+      () => this.prisma.warehouse.findUnique({ where: { id } }),
+      () => this.prisma.warehouse.update({ where: { id }, data: dto }),
+      changedKeys(dto),
+    );
   }
 
   // A warehouse with any history must stay for the ledger; it can only be deactivated.
@@ -63,13 +88,21 @@ export class WarehousesService {
       where: { id },
       select: {
         _count: {
-          select: { stock: true, movements: true, receivings: true, transfersFrom: true, transfersTo: true },
+          select: {
+            stock: true,
+            movements: true,
+            receivings: true,
+            transfersFrom: true,
+            transfersTo: true,
+          },
         },
       },
     });
     if (!warehouse) throw new NotFoundException('Warehouse not found');
     if (Object.values(warehouse._count).some((n) => n > 0)) {
-      throw new ConflictException('Warehouse has stock history; deactivate it instead');
+      throw new ConflictException(
+        'Warehouse has stock history; deactivate it instead',
+      );
     }
     await this.prisma.warehouse.delete({ where: { id } });
   }

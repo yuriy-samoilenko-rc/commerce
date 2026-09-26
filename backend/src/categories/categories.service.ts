@@ -4,6 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { AuditService, changedKeys } from '../audit/audit.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateCategoryDto } from './dto/create-category.dto';
 import { UpdateCategoryDto } from './dto/update-category.dto';
@@ -17,7 +18,10 @@ export interface CategoryNode {
 
 @Injectable()
 export class CategoriesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly audit: AuditService,
+  ) {}
 
   // The category table is small (tens to hundreds of rows), so the whole tree is
   // built in memory from one query instead of recursive SQL.
@@ -42,7 +46,10 @@ export class CategoriesService {
       where: { id },
       include: {
         parent: { select: { id: true, name: true } },
-        children: { select: { id: true, name: true }, orderBy: { name: 'asc' } },
+        children: {
+          select: { id: true, name: true },
+          orderBy: { name: 'asc' },
+        },
       },
     });
     if (!category) throw new NotFoundException('Category not found');
@@ -55,7 +62,11 @@ export class CategoriesService {
 
   async update(id: string, dto: UpdateCategoryDto) {
     if (dto.parentId) await this.assertNoCycle(id, dto.parentId);
-    return this.prisma.category.update({ where: { id }, data: dto });
+    return this.audit.trackUpdate(
+      () => this.prisma.category.findUnique({ where: { id } }),
+      () => this.prisma.category.update({ where: { id }, data: dto }),
+      changedKeys(dto),
+    );
   }
 
   async remove(id: string) {
@@ -76,7 +87,9 @@ export class CategoriesService {
   // Returns the category id plus all nested subcategory ids, so filtering by
   // "Электроника" also returns products from "Смартфоны", "Ноутбуки", etc.
   async withDescendantIds(id: string): Promise<string[]> {
-    const rows = await this.prisma.category.findMany({ select: { id: true, parentId: true } });
+    const rows = await this.prisma.category.findMany({
+      select: { id: true, parentId: true },
+    });
     const childrenOf = new Map<string, string[]>();
     for (const r of rows) {
       if (!r.parentId) continue;
@@ -90,13 +103,22 @@ export class CategoriesService {
   }
 
   private async assertNoCycle(id: string, newParentId: string) {
-    const rows = await this.prisma.category.findMany({ select: { id: true, parentId: true } });
+    const rows = await this.prisma.category.findMany({
+      select: { id: true, parentId: true },
+    });
     const parentOf = new Map(rows.map((r) => [r.id, r.parentId]));
-    if (!parentOf.has(newParentId)) throw new BadRequestException('Parent category does not exist');
+    if (!parentOf.has(newParentId))
+      throw new BadRequestException('Parent category does not exist');
 
-    for (let cur: string | null | undefined = newParentId; cur; cur = parentOf.get(cur)) {
+    for (
+      let cur: string | null | undefined = newParentId;
+      cur;
+      cur = parentOf.get(cur)
+    ) {
       if (cur === id) {
-        throw new BadRequestException('A category cannot be moved inside itself or its subcategory');
+        throw new BadRequestException(
+          'A category cannot be moved inside itself or its subcategory',
+        );
       }
     }
   }

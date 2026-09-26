@@ -1697,6 +1697,67 @@
           }
         }
       ]
+    },
+    {
+      "name": "Audit log (admin)",
+      "item": [
+        {
+          "name": "Latest actions",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/admin/audit-log?page=1&limit=50"
+          }
+        },
+        {
+          "name": "History of one product",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/admin/audit-log?entityType=products&entityId={{productId}}"
+          }
+        },
+        {
+          "name": "History of one order",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/admin/audit-log?entityType=orders&entityId={{orderId}}"
+          }
+        },
+        {
+          "name": "Everything one employee did",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/admin/audit-log?userId={{userId}}"
+          }
+        },
+        {
+          "name": "Failed logins",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/admin/audit-log?action=auth.login_failed"
+          }
+        },
+        {
+          "name": "All auth events (prefix)",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/admin/audit-log?action=auth."
+          }
+        },
+        {
+          "name": "Access denied attempts",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/admin/audit-log?action=access.denied"
+          }
+        },
+        {
+          "name": "Stock adjustments in a period",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/admin/audit-log?action=stock.adjustments.create&from=2026-09-01T00:00:00Z&to=2026-09-30T23:59:59Z"
+          }
+        }
+      ]
     }
   ]
 }

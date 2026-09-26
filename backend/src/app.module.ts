@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
+import { AuditModule } from './audit/audit.module';
 import { AuthModule } from './auth/auth.module';
 import { BrandsModule } from './brands/brands.module';
 import { CategoriesModule } from './categories/categories.module';
@@ -20,6 +21,7 @@ import { WarrantyModule } from './warranty/warranty.module';
 @Module({
   imports: [
     PrismaModule,
+    AuditModule,
     UsersModule,
     AuthModule,
     CategoriesModule,

@@ -1,10 +1,19 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import { AuditService, changedKeys } from '../audit/audit.service';
 import { CategoriesService } from '../categories/categories.service';
 import { pageArgs } from '../common/dto/pagination-query.dto';
 import { Prisma, TransferStatus } from '../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateProductDto } from './dto/create-product.dto';
-import { AdminProductQueryDto, ProductQueryDto, ProductSort } from './dto/product-query.dto';
+import {
+  AdminProductQueryDto,
+  ProductQueryDto,
+  ProductSort,
+} from './dto/product-query.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 
 const relations = {
@@ -65,7 +74,11 @@ function presentPublic<T extends StockRows>({ stock, ...product }: T) {
 }
 
 // Units in transit are off every warehouse's balance but still belong to the company.
-function presentStaff<T extends StockRows & TransitRows>({ stock, transferItems, ...product }: T) {
+function presentStaff<T extends StockRows & TransitRows>({
+  stock,
+  transferItems,
+  ...product
+}: T) {
   const inTransit = transferItems.reduce((s, i) => s + i.quantity, 0);
   return { ...product, stock: { ...stockTotals(stock), inTransit } };
 }
@@ -82,15 +95,25 @@ export class ProductsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly categories: CategoriesService,
+    private readonly audit: AuditService,
   ) {}
 
   async listPublic(query: ProductQueryDto) {
     const where = await this.buildWhere(query, { isArchived: false });
     const [rows, total] = await this.prisma.$transaction([
-      this.prisma.product.findMany({ where, select: publicSelect, ...this.pageAndSort(query) }),
+      this.prisma.product.findMany({
+        where,
+        select: publicSelect,
+        ...this.pageAndSort(query),
+      }),
       this.prisma.product.count({ where }),
     ]);
-    return { items: rows.map(presentPublic), total, page: query.page, limit: query.limit };
+    return {
+      items: rows.map(presentPublic),
+      total,
+      page: query.page,
+      limit: query.limit,
+    };
   }
 
   async listStaff(query: AdminProductQueryDto, canSeeCost: boolean) {
@@ -105,7 +128,12 @@ export class ProductsService {
       }),
       this.prisma.product.count({ where }),
     ]);
-    return { items: rows.map(presentStaff), total, page: query.page, limit: query.limit };
+    return {
+      items: rows.map(presentStaff),
+      total,
+      page: query.page,
+      limit: query.limit,
+    };
   }
 
   async findPublic(id: string) {
@@ -132,14 +160,18 @@ export class ProductsService {
       where: { OR: [{ barcode: code }, { sku: code }] },
       select: staffSelect(canSeeCost),
     });
-    if (!product) throw new NotFoundException('No product with this barcode or SKU');
+    if (!product)
+      throw new NotFoundException('No product with this barcode or SKU');
     return presentStaff(product);
   }
 
   async create(dto: CreateProductDto) {
     this.assertDiscountBelowPrice(dto.sellingPrice, dto.discountPrice);
     const product = await this.prisma.product.create({
-      data: { ...dto, attributes: dto.attributes as Prisma.InputJsonObject | undefined },
+      data: {
+        ...dto,
+        attributes: dto.attributes as Prisma.InputJsonObject | undefined,
+      },
       select: staffSelect(true),
     });
     return presentStaff(product);
@@ -154,23 +186,38 @@ export class ProductsService {
       if (!current) throw new NotFoundException('Product not found');
       this.assertDiscountBelowPrice(
         dto.sellingPrice ?? current.sellingPrice.toNumber(),
-        dto.discountPrice === undefined ? current.discountPrice?.toNumber() : dto.discountPrice,
+        dto.discountPrice === undefined
+          ? current.discountPrice?.toNumber()
+          : dto.discountPrice,
       );
     }
-    const product = await this.prisma.product.update({
-      where: { id },
-      data: { ...dto, attributes: dto.attributes as Prisma.InputJsonObject | undefined },
-      select: staffSelect(true),
-    });
+    const product = await this.audit.trackUpdate(
+      () => this.prisma.product.findUnique({ where: { id } }),
+      () =>
+        this.prisma.product.update({
+          where: { id },
+          data: {
+            ...dto,
+            attributes: dto.attributes as Prisma.InputJsonObject | undefined,
+          },
+          select: staffSelect(true),
+        }),
+      changedKeys(dto),
+    );
     return presentStaff(product);
   }
 
   async setArchived(id: string, isArchived: boolean) {
-    const product = await this.prisma.product.update({
-      where: { id },
-      data: { isArchived },
-      select: staffSelect(true),
-    });
+    const product = await this.audit.trackUpdate(
+      () => this.prisma.product.findUnique({ where: { id } }),
+      () =>
+        this.prisma.product.update({
+          where: { id },
+          data: { isArchived },
+          select: staffSelect(true),
+        }),
+      ['isArchived'],
+    );
     return presentStaff(product);
   }
 
@@ -178,11 +225,16 @@ export class ProductsService {
     return { orderBy: orderBy[query.sort], ...pageArgs(query) };
   }
 
-  private async buildWhere(query: ProductQueryDto, baseWhere: Prisma.ProductWhereInput) {
+  private async buildWhere(
+    query: ProductQueryDto,
+    baseWhere: Prisma.ProductWhereInput,
+  ) {
     const where: Prisma.ProductWhereInput = { ...baseWhere };
 
     if (query.categoryId) {
-      where.categoryId = { in: await this.categories.withDescendantIds(query.categoryId) };
+      where.categoryId = {
+        in: await this.categories.withDescendantIds(query.categoryId),
+      };
     }
     if (query.brandId) where.brandId = query.brandId;
     if (query.minPrice !== undefined || query.maxPrice !== undefined) {
@@ -202,9 +254,14 @@ export class ProductsService {
     return where;
   }
 
-  private assertDiscountBelowPrice(sellingPrice: number, discountPrice?: number | null) {
+  private assertDiscountBelowPrice(
+    sellingPrice: number,
+    discountPrice?: number | null,
+  ) {
     if (discountPrice != null && discountPrice >= sellingPrice) {
-      throw new BadRequestException('discountPrice must be lower than sellingPrice');
+      throw new BadRequestException(
+        'discountPrice must be lower than sellingPrice',
+      );
     }
   }
 }

@@ -23,14 +23,15 @@ enum Role {
 }
 
 model User {
-  id           String   @id @default(uuid())
-  email        String   @unique
+  id           String    @id @default(uuid())
+  email        String    @unique
   passwordHash String
   name         String
-  role         Role     @default(CUSTOMER)
-  isActive     Boolean  @default(true)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  role         Role      @default(CUSTOMER)
+  isActive     Boolean   @default(true)
+  lastLoginAt  DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 
   stockMovements      StockMovement[]
   receivingsCreated   Receiving[]      @relation("ReceivingCreatedBy")
@@ -49,6 +50,7 @@ model User {
   returnsDecided      Return[]         @relation("ReturnDecidedBy")
   returnsRefunded     Return[]         @relation("ReturnRefundedBy")
   warrantyCases       WarrantyCase[]
+  auditLogs           AuditLog[]
 
   @@map("users")
 }
@@ -800,4 +802,34 @@ model WarrantyCase {
   @@index([serialUnitId])
   @@index([status, createdAt])
   @@map("warranty_cases")
+}
+
+// --- Журнал действий (п.22 ТЗ, экран Audit Log) ---
+
+// Кто, когда и что сделал. Только добавление: UPDATE и DELETE запрещены триггером в миграции.
+model AuditLog {
+  id         String   @id @default(uuid())
+  createdAt  DateTime @default(now())
+  // например "auth.login", "products.update", "orders.confirm"
+  action     String
+  entityType String?
+  entityId   String?
+  // HTTP-статус ответа: видно и неудачные попытки
+  statusCode Int?
+  // поля "было → стало": { "sellingPrice": { "from": "699", "to": "649" } }
+  changes    Json?
+  // маршрут и тело запроса без паролей и токенов
+  details    Json?
+  ip         String?
+  userAgent  String?
+
+  // null — действие системы или неизвестного пользователя
+  userId String?
+  user   User?   @relation(fields: [userId], references: [id])
+
+  @@index([createdAt])
+  @@index([userId, createdAt])
+  @@index([entityType, entityId, createdAt])
+  @@index([action, createdAt])
+  @@map("audit_logs")
 }
