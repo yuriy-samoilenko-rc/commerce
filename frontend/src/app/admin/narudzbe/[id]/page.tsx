@@ -3,20 +3,20 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { cache } from "react";
 import { DataTable } from "@/components/admin/data-table";
+import { Facts } from "@/components/admin/facts";
 import { OrderBadges } from "@/components/admin/order-badges";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { Order } from "@/lib/backend-types";
 import { dateTime, money } from "@/lib/format";
+import { isUuid } from "@/lib/ids";
 import { DELIVERY_METHOD, DOCUMENT_TYPE, ORDER_CHANNEL, ORDER_EVENT, PAYMENT_METHOD } from "@/lib/labels";
 import { apiServer, requireUser } from "@/lib/session";
 import { OrderActions } from "./order-actions";
 
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
 // Shared by generateMetadata and the page: one API call per request.
 const load = cache(async (id: string) => {
-  if (!UUID.test(id)) notFound();
+  if (!isUuid(id)) notFound();
   const { status, data } = await apiServer<Order>(`/admin/orders/${id}`);
   if (status === 404) notFound();
   if (!data) throw new Error(`Order failed with status ${status}`);
@@ -62,7 +62,7 @@ export default async function OrderPage({ params }: PageProps<"/admin/narudzbe/[
       )}
 
       <div className="grid items-start gap-4 xl:grid-cols-3">
-        <Card className="xl:col-span-2">
+        <Card className="min-w-0 xl:col-span-2">
           <CardHeader>
             <CardTitle>Stavke</CardTitle>
           </CardHeader>
@@ -198,19 +198,5 @@ export default async function OrderPage({ params }: PageProps<"/admin/narudzbe/[
         </div>
       </div>
     </div>
-  );
-}
-
-function Facts({ rows }: { rows: (readonly [string, React.ReactNode] | null | "" | undefined)[] }) {
-  return (
-    <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-sm">
-      {rows.filter(Boolean).map((row) => {
-        const [label, value] = row as readonly [string, React.ReactNode];
-        return [
-          <dt key={`${label}-t`} className="text-muted-foreground">{label}</dt>,
-          <dd key={`${label}-d`} className="break-words">{value}</dd>,
-        ];
-      })}
-    </dl>
   );
 }

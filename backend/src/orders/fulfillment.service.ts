@@ -4,6 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { conflict } from '../common/errors';
 import { LONG_TX } from '../common/transactions';
 import {
   DeliveryMethod,
@@ -44,7 +45,10 @@ export class FulfillmentService {
         order.paymentStatus === PaymentStatus.UNPAID &&
         order.paymentMethod !== PaymentMethod.CASH_ON_DELIVERY
       ) {
-        throw new ConflictException('The order must be paid before picking');
+        throw conflict(
+          'ORDER_NOT_PAID',
+          'The order must be paid before picking',
+        );
       }
       await this.transition(
         tx,
@@ -202,7 +206,8 @@ export class FulfillmentService {
         throw wrongState(order, 'shipped');
       const pickup = order.deliveryMethod === DeliveryMethod.PICKUP;
       if (pickup && order.paymentStatus === PaymentStatus.UNPAID) {
-        throw new ConflictException(
+        throw conflict(
+          'ORDER_NOT_PAID',
           'Take the payment before handing the order to the customer',
         );
       }
@@ -280,7 +285,7 @@ export class FulfillmentService {
         order.status === OrderStatus.DELIVERED &&
         order.paymentStatus === PaymentStatus.UNPAID
       ) {
-        throw new ConflictException('The order is not paid yet');
+        throw conflict('ORDER_NOT_PAID', 'The order is not paid yet');
       }
       const { count } = await tx.order.updateMany({
         where: {

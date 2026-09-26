@@ -2,11 +2,11 @@ import {
   ArgumentsHost,
   BadRequestException,
   Catch,
-  ConflictException,
   HttpException,
   NotFoundException,
 } from '@nestjs/common';
 import { BaseExceptionFilter } from '@nestjs/core';
+import { conflict } from '../common/errors';
 import { Prisma } from '../generated/prisma/client';
 
 // Constraint names look like "products_sku_key" / "products_categoryId_fkey";
@@ -25,8 +25,10 @@ export class PrismaExceptionFilter extends BaseExceptionFilter {
 
     switch (e.code) {
       case 'P2002':
-        mapped = new ConflictException(
+        mapped = conflict(
+          'DUPLICATE',
           column ? `A record with this ${column} already exists` : 'Duplicate value',
+          column ? { field: column } : undefined,
         );
         break;
       case 'P2025':

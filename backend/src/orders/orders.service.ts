@@ -8,6 +8,7 @@ import {
   pageArgs,
   PaginationQueryDto,
 } from '../common/dto/pagination-query.dto';
+import { badRequest, conflict } from '../common/errors';
 import { LONG_TX } from '../common/transactions';
 import {
   DeliveryMethod,
@@ -230,8 +231,10 @@ export class OrdersService {
       const lines = items.map((item) => {
         const p = byId.get(item.productId);
         if (!p || p.isArchived)
-          throw new BadRequestException(
+          throw badRequest(
+            'PRODUCT_UNAVAILABLE',
             `Product ${item.productId} is not available`,
+            { product: p?.name ?? item.productId },
           );
         const unitPrice = p.discountPrice ?? p.sellingPrice;
         return {
@@ -543,8 +546,10 @@ export function wrongState(
   order: { status: OrderStatus; paymentStatus: PaymentStatus },
   action: string,
 ) {
-  return new ConflictException(
+  return conflict(
+    'ORDER_WRONG_STATE',
     `Order is ${order.status} / ${order.paymentStatus} and cannot be ${action}`,
+    { status: order.status, paymentStatus: order.paymentStatus },
   );
 }
 

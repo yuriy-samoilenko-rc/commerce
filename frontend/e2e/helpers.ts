@@ -41,18 +41,16 @@ export async function createUser(role: "WAREHOUSE" | "MANAGER" | "ACCOUNTANT" | 
 }
 
 /**
- * A product with stock in its own warehouse and a phone order for it (status NEW),
- * created straight through the API, so every test starts from known data.
+ * A product with `stock` units in its own warehouse, created straight through the API,
+ * so every test starts from known data.
  */
-export async function seedOrder(
-  order: { deliveryMethod?: "PICKUP" | "COURIER"; paymentMethod?: "BANK_TRANSFER" | "CASH_ON_DELIVERY" } = {},
-) {
+export async function seedProduct(stock = 5) {
   const token = await adminToken();
   const run = `${Date.now()}${Math.floor(Math.random() * 1000)}`;
   const post = <T>(path: string, json: unknown) => backend<T>(path, { method: "POST", token, json });
 
   const category = await post<{ id: string }>("/categories", { name: `E2E kategorija ${run}` });
-  const product = await post<{ id: string; sku: string }>("/admin/products", {
+  const product = await post<{ id: string; sku: string; name: string }>("/admin/products", {
     name: `E2E slušalice ${run}`,
     sku: `E2E-${run}`,
     purchasePrice: 20,
@@ -64,10 +62,38 @@ export async function seedOrder(
   const receiving = await post<{ id: string }>("/receivings", {
     supplierId: supplier.id,
     warehouseId: warehouse.id,
-    items: [{ productId: product.id, quantity: 5, purchasePrice: 20 }],
+    items: [{ productId: product.id, quantity: stock, purchasePrice: 20 }],
   });
   await post(`/receivings/${receiving.id}/confirm`, {});
+  return { product, warehouse, token, run };
+}
 
+/** An empty category and a brand to pick in the product form. */
+export async function seedCatalog() {
+  const token = await adminToken();
+  const run = `${Date.now()}${Math.floor(Math.random() * 1000)}`;
+  const post = <T>(path: string, json: unknown) => backend<T>(path, { method: "POST", token, json });
+  const category = await post<{ id: string; name: string }>("/categories", { name: `E2E televizori ${run}` });
+  const brand = await post<{ id: string; name: string }>("/brands", { name: `E2E brend ${run}` });
+  return { category, brand, run, token };
+}
+
+/** Straight API call as admin, for checks the UI deliberately does not offer. */
+export async function apiAsAdmin(method: string, path: string, json?: unknown) {
+  const res = await fetch(`${API}${path}`, {
+    method,
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${await adminToken()}` },
+    body: json === undefined ? undefined : JSON.stringify(json),
+  });
+  return { status: res.status, body: (await res.json().catch(() => null)) as Record<string, unknown> | null };
+}
+
+/** A seeded product and a phone order for two of it (status NEW). */
+export async function seedOrder(
+  order: { deliveryMethod?: "PICKUP" | "COURIER"; paymentMethod?: "BANK_TRANSFER" | "CASH_ON_DELIVERY" } = {},
+) {
+  const { product, warehouse, token, run } = await seedProduct();
+  const post = <T>(path: string, json: unknown) => backend<T>(path, { method: "POST", token, json });
   const created = await post<{ id: string; number: number }>("/admin/orders", {
     items: [{ productId: product.id, quantity: 2 }],
     customerName: `Kupac ${run}`,

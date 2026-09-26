@@ -8,6 +8,11 @@ import type { PublicUser } from "@backend/users/users.service";
 import type { DashboardService } from "@backend/reports/dashboard.service";
 import type { NotificationsService } from "@backend/notifications/notifications.service";
 import type { OrdersService } from "@backend/orders/orders.service";
+import type { ProductsService } from "@backend/products/products.service";
+import type { UsersService } from "@backend/users/users.service";
+import type { CategoriesService } from "@backend/categories/categories.service";
+import type { BrandsService } from "@backend/brands/brands.service";
+import type { StockService } from "@backend/stock/stock.service";
 
 export type Json<T> = T extends { toJSON(): infer R }
   ? R
@@ -29,3 +34,12 @@ export type UnreadCount = Returns<NotificationsService["unreadCount"]>;
 export type OrderList = Returns<OrdersService["listForStaff"]>;
 export type Order = Returns<OrdersService["findForStaff"]>;
 export type OrderStatus = Order["status"];
+export type StaffProductList = Returns<ProductsService["listStaff"]>;
+export type StaffProduct = StaffProductList["items"][number];
+export type ProductDetail = Returns<ProductsService["findStaff"]>;
+export type CategoryTree = Returns<CategoriesService["findTree"]>;
+export type BrandList = Returns<BrandsService["findAll"]>;
+export type StockList = Returns<StockService["listStock"]>;
+export type MovementList = Returns<StockService["listMovements"]>;
+export type CustomerList = Returns<UsersService["listCustomers"]>;
+export type Customer = CustomerList["items"][number];

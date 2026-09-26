@@ -3,6 +3,7 @@ import {
   ConflictException,
   Injectable,
 } from '@nestjs/common';
+import { conflict } from '../common/errors';
 import { inSequence } from '../common/transactions';
 import { formatCountNumber } from '../common/document-numbers';
 import { StockAlertService } from '../notifications/stock-alert.service';
@@ -216,8 +217,14 @@ export class StockLedgerService {
       need -= take;
     }
     if (need) {
-      throw new ConflictException(
+      throw conflict(
+        'INSUFFICIENT_STOCK',
         `Not enough stock for "${product.name}": requested ${input.quantity}, available ${input.quantity - need}`,
+        {
+          product: product.name,
+          requested: input.quantity,
+          available: input.quantity - need,
+        },
       );
     }
     await this.alerts.check(tx, input.productId);

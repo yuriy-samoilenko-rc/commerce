@@ -1,11 +1,8 @@
-import {
-  BadRequestException,
-  Injectable,
-  NotFoundException,
-} from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { AuditService, changedKeys } from '../audit/audit.service';
 import { CategoriesService } from '../categories/categories.service';
 import { pageArgs } from '../common/dto/pagination-query.dto';
+import { badRequest, conflict } from '../common/errors';
 import { Prisma, TransferStatus } from '../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateProductDto } from './dto/create-product.dto';
@@ -180,6 +177,8 @@ export class ProductsService {
   }
 
   async update(id: string, dto: UpdateProductDto) {
+    if (dto.trackSerial !== undefined)
+      await this.assertSerialModeChangeable(id, dto.trackSerial);
     if (dto.sellingPrice !== undefined || dto.discountPrice !== undefined) {
       const current = await this.prisma.product.findUnique({
         where: { id },
@@ -256,12 +255,42 @@ export class ProductsService {
     return where;
   }
 
+  /**
+   * Serial tracking can only be switched while nothing of the product exists yet:
+   * with stock on hand, the balance and the serial units would stop matching.
+   */
+  private async assertSerialModeChangeable(id: string, trackSerial: boolean) {
+    const product = await this.prisma.product.findUnique({
+      where: { id },
+      select: {
+        trackSerial: true,
+        _count: {
+          select: {
+            serialUnits: true,
+            stock: {
+              where: { OR: [{ quantity: { gt: 0 } }, { reserved: { gt: 0 } }] },
+            },
+          },
+        },
+      },
+    });
+    if (!product) throw new NotFoundException('Product not found');
+    if (product.trackSerial === trackSerial) return;
+    if (product._count.stock || product._count.serialUnits) {
+      throw conflict(
+        'SERIAL_MODE_LOCKED',
+        'Serial tracking cannot be changed while the product has stock or serial numbers',
+      );
+    }
+  }
+
   private assertDiscountBelowPrice(
     sellingPrice: number,
     discountPrice?: number | null,
   ) {
     if (discountPrice != null && discountPrice >= sellingPrice) {
-      throw new BadRequestException(
+      throw badRequest(
+        'DISCOUNT_NOT_LOWER',
         'discountPrice must be lower than sellingPrice',
       );
     }
