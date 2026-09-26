@@ -13,6 +13,7 @@ import {
 } from '@nestjs/common';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { Roles } from '../auth/decorators/roles.decorator';
+import { STAFF_ROLES } from '../auth/roles';
 import { Role } from '../generated/prisma/client';
 import { PublicUser } from '../users/users.service';
 import { CreateProductDto } from './dto/create-product.dto';
@@ -24,7 +25,7 @@ const COST_VIEWERS: Role[] = [Role.ADMIN, Role.ACCOUNTANT];
 const canSeeCost = (user: PublicUser) => COST_VIEWERS.includes(user.role);
 
 @Controller('admin/products')
-@Roles(Role.ADMIN, Role.MANAGER, Role.WAREHOUSE, Role.ACCOUNTANT)
+@Roles(...STAFF_ROLES)
 export class AdminProductsController {
   constructor(private readonly products: ProductsService) {}
 

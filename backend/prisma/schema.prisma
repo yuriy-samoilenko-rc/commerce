@@ -32,6 +32,13 @@ model User {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
+  stockMovements      StockMovement[]
+  receivingsCreated   Receiving[]     @relation("ReceivingCreatedBy")
+  receivingsConfirmed Receiving[]     @relation("ReceivingConfirmedBy")
+  transfersCreated    Transfer[]      @relation("TransferCreatedBy")
+  transfersSent       Transfer[]      @relation("TransferSentBy")
+  transfersReceived   Transfer[]      @relation("TransferReceivedBy")
+
   @@map("users")
 }
 
@@ -84,32 +91,65 @@ model Product {
   brandId String?
   brand   Brand?  @relation(fields: [brandId], references: [id], onDelete: Restrict)
 
-  stock Stock[]
+  stock          Stock[]
+  movements      StockMovement[]
+  serialUnits    SerialUnit[]
+  receivingItems ReceivingItem[]
+  transferItems  TransferItem[]
 
   @@index([categoryId])
   @@index([brandId])
   @@map("products")
 }
 
-// --- Этап 1: склады и остатки ---
+// --- Этап 2: склады, поставщики, остатки и журнал движений ---
 
 model Warehouse {
-  id      String  @id @default(uuid())
-  name    String
-  address String?
-  stock   Stock[]
+  id        String   @id @default(uuid())
+  name      String   @unique
+  address   String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  stock       Stock[]
+  movements   StockMovement[]
+  serialUnits   SerialUnit[]
+  receivings    Receiving[]
+  transfersFrom Transfer[]  @relation("TransferFrom")
+  transfersTo   Transfer[]  @relation("TransferTo")
 
   @@map("warehouses")
+}
+
+model Supplier {
+  id            String   @id @default(uuid())
+  name          String   @unique
+  taxId         String?
+  phone         String?
+  email         String?
+  address       String?
+  contactPerson String?
+  notes         String?
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  receivings Receiving[]
+
+  @@map("suppliers")
 }
 
 // Остаток товара на конкретном складе.
 // quantity — физически на складе, reserved — зарезервировано под заказы.
 // "Доступно" = quantity - reserved считается на уровне приложения, а не хранится отдельным полем,
 // чтобы не рассинхронизироваться (см. п.27 ТЗ про журнал операций).
+// Это кэш баланса: он меняется только в той же транзакции, что и запись в StockMovement.
+// В миграции добавлены CHECK: quantity >= 0, reserved >= 0, reserved <= quantity.
 model Stock {
-  id       String @id @default(uuid())
-  quantity Int    @default(0)
-  reserved Int    @default(0)
+  id        String   @id @default(uuid())
+  quantity  Int      @default(0)
+  reserved  Int      @default(0)
+  updatedAt DateTime @updatedAt
 
   productId String
   product   Product @relation(fields: [productId], references: [id])
@@ -118,5 +158,196 @@ model Stock {
   warehouse   Warehouse @relation(fields: [warehouseId], references: [id])
 
   @@unique([productId, warehouseId])
+  @@index([warehouseId])
   @@map("stock")
+}
+
+enum StockMovementType {
+  RECEIPT
+  ADJUSTMENT
+  TRANSFER_OUT
+  TRANSFER_IN
+}
+
+// Журнал движений (п.27 ТЗ). Строки только добавляются: UPDATE и DELETE запрещены
+// триггером в миграции, ошибка исправляется новой корректирующей записью.
+model StockMovement {
+  id           String            @id @default(uuid())
+  type         StockMovementType
+  // со знаком: +20 приход, -2 списание
+  quantity     Int
+  // остаток товара на этом складе сразу после движения — для истории вида "10 → 9"
+  balanceAfter Int
+  reason       String?
+  createdAt    DateTime          @default(now())
+
+  productId String
+  product   Product @relation(fields: [productId], references: [id])
+
+  warehouseId String
+  warehouse   Warehouse @relation(fields: [warehouseId], references: [id])
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+
+  // для товаров с поштучным учётом: одна строка журнала = один экземпляр
+  serialUnitId String?
+  serialUnit   SerialUnit? @relation(fields: [serialUnitId], references: [id])
+
+  // документ-основание
+  receivingId String?
+  receiving   Receiving? @relation(fields: [receivingId], references: [id])
+
+  transferId String?
+  transfer   Transfer? @relation(fields: [transferId], references: [id])
+
+  @@index([productId, createdAt])
+  @@index([warehouseId, createdAt])
+  @@index([serialUnitId])
+  @@index([receivingId])
+  @@index([transferId])
+  @@map("stock_movements")
+}
+
+enum SerialUnitStatus {
+  IN_STOCK
+  IN_TRANSIT
+  WRITTEN_OFF
+}
+
+// Конкретный экземпляр товара с серийным номером (п.4, п.12 ТЗ).
+model SerialUnit {
+  id           String           @id @default(uuid())
+  serialNumber String           @unique
+  status       SerialUnitStatus @default(IN_STOCK)
+  createdAt    DateTime         @default(now())
+
+  productId String
+  product   Product @relation(fields: [productId], references: [id])
+
+  // null, когда экземпляр не на складе: в пути, списан, продан
+  warehouseId String?
+  warehouse   Warehouse? @relation(fields: [warehouseId], references: [id])
+
+  movements StockMovement[]
+
+  @@index([productId, warehouseId, status])
+  @@map("serial_units")
+}
+
+enum ReceivingStatus {
+  DRAFT
+  CONFIRMED
+  CANCELLED
+}
+
+// Приёмка товара от поставщика (п.6 ТЗ).
+model Receiving {
+  id String @id @default(uuid())
+  // порядковый номер, наружу отдаётся как RCV-00001
+  number Int @unique @default(autoincrement())
+  status ReceivingStatus @default(DRAFT)
+
+  supplierDocNumber String?
+  supplierDocDate   DateTime? @db.Date
+  notes             String?
+
+  supplierId String
+  supplier   Supplier @relation(fields: [supplierId], references: [id])
+
+  warehouseId String
+  warehouse   Warehouse @relation(fields: [warehouseId], references: [id])
+
+  createdById String
+  createdBy   User   @relation("ReceivingCreatedBy", fields: [createdById], references: [id])
+
+  confirmedById String?
+  confirmedBy   User?     @relation("ReceivingConfirmedBy", fields: [confirmedById], references: [id])
+  confirmedAt   DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  items     ReceivingItem[]
+  movements StockMovement[]
+
+  @@index([status, createdAt])
+  @@map("receivings")
+}
+
+model ReceivingItem {
+  id            String   @id @default(uuid())
+  quantity      Int
+  purchasePrice Decimal  @db.Decimal(10, 2)
+  // серийные номера вводятся в черновике, экземпляры создаются при подтверждении
+  serialNumbers String[]
+
+  receivingId String
+  receiving   Receiving @relation(fields: [receivingId], references: [id], onDelete: Cascade)
+
+  productId String
+  product   Product @relation(fields: [productId], references: [id])
+
+  @@index([receivingId])
+  @@map("receiving_items")
+}
+
+enum TransferStatus {
+  DRAFT
+  IN_TRANSIT
+  RECEIVED
+  CANCELLED
+}
+
+// Перемещение между складами (п.7 ТЗ). Пока статус IN_TRANSIT, товар списан
+// со склада-источника и ещё не зачислен на склад назначения — он "в пути".
+model Transfer {
+  id     String         @id @default(uuid())
+  // наружу отдаётся как TR-00001
+  number Int            @unique @default(autoincrement())
+  status TransferStatus @default(DRAFT)
+  notes  String?
+
+  fromWarehouseId String
+  fromWarehouse   Warehouse @relation("TransferFrom", fields: [fromWarehouseId], references: [id])
+
+  toWarehouseId String
+  toWarehouse   Warehouse @relation("TransferTo", fields: [toWarehouseId], references: [id])
+
+  createdById String
+  createdBy   User   @relation("TransferCreatedBy", fields: [createdById], references: [id])
+
+  sentById String?
+  sentBy   User?     @relation("TransferSentBy", fields: [sentById], references: [id])
+  sentAt   DateTime?
+
+  receivedById String?
+  receivedBy   User?     @relation("TransferReceivedBy", fields: [receivedById], references: [id])
+  receivedAt   DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  items     TransferItem[]
+  movements StockMovement[]
+
+  @@index([status, createdAt])
+  @@index([toWarehouseId, status])
+  @@map("transfers")
+}
+
+model TransferItem {
+  id            String   @id @default(uuid())
+  quantity      Int
+  serialNumbers String[]
+
+  transferId String
+  transfer   Transfer @relation(fields: [transferId], references: [id], onDelete: Cascade)
+
+  productId String
+  product   Product @relation(fields: [productId], references: [id])
+
+  @@index([transferId])
+  @@index([productId])
+  @@map("transfer_items")
 }

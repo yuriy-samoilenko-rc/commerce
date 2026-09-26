@@ -49,6 +49,30 @@
     {
       "key": "productId",
       "value": ""
+    },
+    {
+      "key": "warehouseId",
+      "value": ""
+    },
+    {
+      "key": "supplierId",
+      "value": ""
+    },
+    {
+      "key": "receivingId",
+      "value": ""
+    },
+    {
+      "key": "serialNumber",
+      "value": "SN-0001"
+    },
+    {
+      "key": "toWarehouseId",
+      "value": ""
+    },
+    {
+      "key": "transferId",
+      "value": ""
     }
   ],
   "item": [
@@ -525,6 +549,400 @@
           "request": {
             "method": "POST",
             "url": "{{baseUrl}}/admin/products/{{productId}}/restore"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Warehouses",
+      "item": [
+        {
+          "name": "List warehouses (with totals)",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/warehouses"
+          }
+        },
+        {
+          "name": "Create warehouse",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code < 300) {",
+                  "  pm.collectionVariables.set('warehouseId', pm.response.json().id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/warehouses",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Main Warehouse\",\n  \"address\": \"Beograd\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Get warehouse",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/warehouses/{{warehouseId}}"
+          }
+        },
+        {
+          "name": "Deactivate warehouse",
+          "request": {
+            "method": "PATCH",
+            "url": "{{baseUrl}}/warehouses/{{warehouseId}}",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"isActive\": false\n}"
+            }
+          }
+        },
+        {
+          "name": "Delete warehouse (only without history)",
+          "request": {
+            "method": "DELETE",
+            "url": "{{baseUrl}}/warehouses/{{warehouseId}}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Suppliers",
+      "item": [
+        {
+          "name": "List suppliers",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/suppliers"
+          }
+        },
+        {
+          "name": "Create supplier",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code < 300) {",
+                  "  pm.collectionVariables.set('supplierId', pm.response.json().id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/suppliers",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"ABC Electronics\",\n  \"taxId\": \"123456789\",\n  \"phone\": \"+381 11 123 4567\",\n  \"email\": \"sales@abc.example\",\n  \"address\": \"Novi Sad\",\n  \"contactPerson\": \"Petar Petrovic\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Update supplier",
+          "request": {
+            "method": "PATCH",
+            "url": "{{baseUrl}}/suppliers/{{supplierId}}",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone\": \"+381 11 765 4321\"\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Receiving",
+      "item": [
+        {
+          "name": "Create draft",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code < 300) {",
+                  "  pm.collectionVariables.set('receivingId', pm.response.json().id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/receivings",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"supplierId\": \"{{supplierId}}\",\n  \"warehouseId\": \"{{warehouseId}}\",\n  \"supplierDocNumber\": \"INV-1254\",\n  \"supplierDocDate\": \"2026-09-26\",\n  \"items\": [\n    {\n      \"productId\": \"{{productId}}\",\n      \"quantity\": 2,\n      \"purchasePrice\": 650,\n      \"serialNumbers\": [\n        \"{{serialNumber}}\",\n        \"SN-0002\"\n      ]\n    }\n  ]\n}"
+            }
+          }
+        },
+        {
+          "name": "Update draft (replace items)",
+          "request": {
+            "method": "PATCH",
+            "url": "{{baseUrl}}/receivings/{{receivingId}}",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"notes\": \"Коробка №2 повреждена\",\n  \"items\": [\n    {\n      \"productId\": \"{{productId}}\",\n      \"quantity\": 2,\n      \"purchasePrice\": 640,\n      \"serialNumbers\": [\n        \"{{serialNumber}}\",\n        \"SN-0002\"\n      ]\n    }\n  ]\n}"
+            }
+          }
+        },
+        {
+          "name": "Confirm (posts stock)",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/receivings/{{receivingId}}/confirm"
+          }
+        },
+        {
+          "name": "Cancel draft",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/receivings/{{receivingId}}/cancel"
+          }
+        },
+        {
+          "name": "Get receiving",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/receivings/{{receivingId}}"
+          }
+        },
+        {
+          "name": "List receivings",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/receivings?status=CONFIRMED&page=1&limit=20"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Stock",
+      "item": [
+        {
+          "name": "Stock balances",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/stock?warehouseId={{warehouseId}}&onlyAvailable=true"
+          }
+        },
+        {
+          "name": "Movements of a product",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/stock/movements?productId={{productId}}"
+          }
+        },
+        {
+          "name": "Movements of a receiving",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/stock/movements?receivingId={{receivingId}}"
+          }
+        },
+        {
+          "name": "Adjust: write off (serial)",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/stock/adjustments",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"warehouseId\": \"{{warehouseId}}\",\n  \"productId\": \"{{productId}}\",\n  \"quantity\": -1,\n  \"reason\": \"Разбит экран при хранении\",\n  \"serialNumbers\": [\n    \"SN-0002\"\n  ]\n}"
+            }
+          }
+        },
+        {
+          "name": "Adjust: found extra unit (serial)",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/stock/adjustments",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"warehouseId\": \"{{warehouseId}}\",\n  \"productId\": \"{{productId}}\",\n  \"quantity\": 1,\n  \"reason\": \"Найдено при пересчёте\",\n  \"serialNumbers\": [\n    \"SN-0003\"\n  ]\n}"
+            }
+          }
+        },
+        {
+          "name": "Serial number history",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/serials/{{serialNumber}}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Transfers",
+      "item": [
+        {
+          "name": "Create destination warehouse (Store)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code < 300) pm.collectionVariables.set('toWarehouseId', pm.response.json().id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/warehouses",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Store\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Create draft",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code < 300) pm.collectionVariables.set('transferId', pm.response.json().id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/transfers",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fromWarehouseId\": \"{{warehouseId}}\",\n  \"toWarehouseId\": \"{{toWarehouseId}}\",\n  \"notes\": \"На витрину\",\n  \"items\": [\n    {\n      \"productId\": \"{{productId}}\",\n      \"quantity\": 1,\n      \"serialNumbers\": [\n        \"{{serialNumber}}\"\n      ]\n    }\n  ]\n}"
+            }
+          }
+        },
+        {
+          "name": "Update draft (replace items)",
+          "request": {
+            "method": "PATCH",
+            "url": "{{baseUrl}}/transfers/{{transferId}}",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"items\": [\n    {\n      \"productId\": \"{{productId}}\",\n      \"quantity\": 1,\n      \"serialNumbers\": [\n        \"{{serialNumber}}\"\n      ]\n    }\n  ]\n}"
+            }
+          }
+        },
+        {
+          "name": "Send (goods leave source, in transit)",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/transfers/{{transferId}}/send"
+          }
+        },
+        {
+          "name": "Receive (goods arrive at destination)",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/transfers/{{transferId}}/receive"
+          }
+        },
+        {
+          "name": "Cancel draft",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/transfers/{{transferId}}/cancel"
+          }
+        },
+        {
+          "name": "Get transfer",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/transfers/{{transferId}}"
+          }
+        },
+        {
+          "name": "In transit to destination",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/transfers?status=IN_TRANSIT&toWarehouseId={{toWarehouseId}}"
+          }
+        },
+        {
+          "name": "Movements of this transfer",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/stock/movements?transferId={{transferId}}"
           }
         }
       ]

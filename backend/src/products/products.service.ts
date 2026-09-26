@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { CategoriesService } from '../categories/categories.service';
-import { Prisma } from '../generated/prisma/client';
+import { pageArgs } from '../common/dto/pagination-query.dto';
+import { Prisma, TransferStatus } from '../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateProductDto } from './dto/create-product.dto';
 import { AdminProductQueryDto, ProductQueryDto, ProductSort } from './dto/product-query.dto';
@@ -24,9 +25,10 @@ const publicSelect = {
   warrantyMonths: true,
   weightKg: true,
   ...relations,
+  stock: { select: { quantity: true, reserved: true } },
 } satisfies Prisma.ProductSelect;
 
-function staffSelect(canSeeCost: boolean): Prisma.ProductSelect {
+function staffSelect(canSeeCost: boolean) {
   return {
     ...publicSelect,
     barcode: true,
@@ -36,7 +38,31 @@ function staffSelect(canSeeCost: boolean): Prisma.ProductSelect {
     createdAt: true,
     updatedAt: true,
     purchasePrice: canSeeCost,
-  };
+    transferItems: {
+      where: { transfer: { status: TransferStatus.IN_TRANSIT } },
+      select: { quantity: true },
+    },
+  } satisfies Prisma.ProductSelect;
+}
+
+type StockRows = { stock: { quantity: number; reserved: number }[] };
+type TransitRows = { transferItems: { quantity: number }[] };
+
+function stockTotals(rows: StockRows['stock']) {
+  const quantity = rows.reduce((s, r) => s + r.quantity, 0);
+  const reserved = rows.reduce((s, r) => s + r.reserved, 0);
+  return { quantity, reserved, available: quantity - reserved };
+}
+
+// The shop only learns whether it can be bought, not how many units the company holds.
+function presentPublic<T extends StockRows>({ stock, ...product }: T) {
+  return { ...product, inStock: stockTotals(stock).available > 0 };
+}
+
+// Units in transit are off every warehouse's balance but still belong to the company.
+function presentStaff<T extends StockRows & TransitRows>({ stock, transferItems, ...product }: T) {
+  const inTransit = transferItems.reduce((s, i) => s + i.quantity, 0);
+  return { ...product, stock: { ...stockTotals(stock), inTransit } };
 }
 
 const orderBy: Record<ProductSort, Prisma.ProductOrderByWithRelationInput[]> = {
@@ -53,14 +79,28 @@ export class ProductsService {
     private readonly categories: CategoriesService,
   ) {}
 
-  listPublic(query: ProductQueryDto) {
-    return this.list(query, { isArchived: false }, publicSelect);
+  async listPublic(query: ProductQueryDto) {
+    const where = await this.buildWhere(query, { isArchived: false });
+    const [rows, total] = await this.prisma.$transaction([
+      this.prisma.product.findMany({ where, select: publicSelect, ...this.pageAndSort(query) }),
+      this.prisma.product.count({ where }),
+    ]);
+    return { items: rows.map(presentPublic), total, page: query.page, limit: query.limit };
   }
 
-  listStaff(query: AdminProductQueryDto, canSeeCost: boolean) {
+  async listStaff(query: AdminProductQueryDto, canSeeCost: boolean) {
     const archived =
       query.status === 'all' ? {} : { isArchived: query.status === 'archived' };
-    return this.list(query, archived, staffSelect(canSeeCost));
+    const where = await this.buildWhere(query, archived);
+    const [rows, total] = await this.prisma.$transaction([
+      this.prisma.product.findMany({
+        where,
+        select: staffSelect(canSeeCost),
+        ...this.pageAndSort(query),
+      }),
+      this.prisma.product.count({ where }),
+    ]);
+    return { items: rows.map(presentStaff), total, page: query.page, limit: query.limit };
   }
 
   async findPublic(id: string) {
@@ -69,7 +109,7 @@ export class ProductsService {
       select: publicSelect,
     });
     if (!product) throw new NotFoundException('Product not found');
-    return product;
+    return presentPublic(product);
   }
 
   async findStaff(id: string, canSeeCost: boolean) {
@@ -78,7 +118,7 @@ export class ProductsService {
       select: staffSelect(canSeeCost),
     });
     if (!product) throw new NotFoundException('Product not found');
-    return product;
+    return presentStaff(product);
   }
 
   // Scanners read the barcode; SKU is accepted too for labels printed with it.
@@ -88,15 +128,16 @@ export class ProductsService {
       select: staffSelect(canSeeCost),
     });
     if (!product) throw new NotFoundException('No product with this barcode or SKU');
-    return product;
+    return presentStaff(product);
   }
 
-  create(dto: CreateProductDto) {
+  async create(dto: CreateProductDto) {
     this.assertDiscountBelowPrice(dto.sellingPrice, dto.discountPrice);
-    return this.prisma.product.create({
+    const product = await this.prisma.product.create({
       data: { ...dto, attributes: dto.attributes as Prisma.InputJsonObject | undefined },
       select: staffSelect(true),
     });
+    return presentStaff(product);
   }
 
   async update(id: string, dto: UpdateProductDto) {
@@ -111,26 +152,28 @@ export class ProductsService {
         dto.discountPrice === undefined ? current.discountPrice?.toNumber() : dto.discountPrice,
       );
     }
-    return this.prisma.product.update({
+    const product = await this.prisma.product.update({
       where: { id },
       data: { ...dto, attributes: dto.attributes as Prisma.InputJsonObject | undefined },
       select: staffSelect(true),
     });
+    return presentStaff(product);
   }
 
-  setArchived(id: string, isArchived: boolean) {
-    return this.prisma.product.update({
+  async setArchived(id: string, isArchived: boolean) {
+    const product = await this.prisma.product.update({
       where: { id },
       data: { isArchived },
       select: staffSelect(true),
     });
+    return presentStaff(product);
   }
 
-  private async list(
-    query: ProductQueryDto,
-    baseWhere: Prisma.ProductWhereInput,
-    select: Prisma.ProductSelect,
-  ) {
+  private pageAndSort(query: ProductQueryDto) {
+    return { orderBy: orderBy[query.sort], ...pageArgs(query) };
+  }
+
+  private async buildWhere(query: ProductQueryDto, baseWhere: Prisma.ProductWhereInput) {
     const where: Prisma.ProductWhereInput = { ...baseWhere };
 
     if (query.categoryId) {
@@ -151,18 +194,7 @@ export class ProductsService {
         { brand: { name: contains } },
       ];
     }
-
-    const [items, total] = await this.prisma.$transaction([
-      this.prisma.product.findMany({
-        where,
-        select,
-        orderBy: orderBy[query.sort],
-        skip: (query.page - 1) * query.limit,
-        take: query.limit,
-      }),
-      this.prisma.product.count({ where }),
-    ]);
-    return { items, total, page: query.page, limit: query.limit };
+    return where;
   }
 
   private assertDiscountBelowPrice(sellingPrice: number, discountPrice?: number | null) {

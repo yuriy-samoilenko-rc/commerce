@@ -1,0 +1,4 @@
+const format = (prefix: string) => (n: number) => `${prefix}-${String(n).padStart(5, '0')}`;
+
+export const formatReceivingNumber = format('RCV');
+export const formatTransferNumber = format('TR');
