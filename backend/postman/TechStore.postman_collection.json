@@ -81,6 +81,22 @@
     {
       "key": "orderId",
       "value": ""
+    },
+    {
+      "key": "returnId",
+      "value": ""
+    },
+    {
+      "key": "returnItemId",
+      "value": ""
+    },
+    {
+      "key": "orderItemId",
+      "value": ""
+    },
+    {
+      "key": "warrantyCaseId",
+      "value": ""
     }
   ],
   "item": [
@@ -1379,6 +1395,305 @@
           "request": {
             "method": "GET",
             "url": "{{baseUrl}}/serials/{{serialNumber}}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Returns (customer)",
+      "item": [
+        {
+          "name": "Request a return (reasons: DEFECTIVE, CHANGED_MIND, DAMAGED, WRONG_ITEM, OTHER)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code < 300) pm.collectionVariables.set('returnId', pm.response.json().id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/returns",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"orderId\": \"{{orderId}}\",\n  \"items\": [\n    {\n      \"orderItemId\": \"{{orderItemId}}\",\n      \"quantity\": 1,\n      \"serialNumbers\": [\n        \"{{serialNumber}}\"\n      ],\n      \"reason\": \"DEFECTIVE\",\n      \"reasonNote\": \"Нет изображения\"\n    }\n  ]\n}"
+            }
+          }
+        },
+        {
+          "name": "My returns",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/returns"
+          }
+        },
+        {
+          "name": "My return",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/returns/{{returnId}}"
+          }
+        },
+        {
+          "name": "Cancel before sending it back",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/returns/{{returnId}}/cancel"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Returns (staff)",
+      "item": [
+        {
+          "name": "List returns",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/admin/returns?status=RECEIVED"
+          }
+        },
+        {
+          "name": "Create a return for a customer",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code < 300) pm.collectionVariables.set('returnId', pm.response.json().id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/admin/returns",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"orderId\": \"{{orderId}}\",\n  \"items\": [\n    {\n      \"orderItemId\": \"{{orderItemId}}\",\n      \"quantity\": 1,\n      \"serialNumbers\": [\n        \"{{serialNumber}}\"\n      ],\n      \"reason\": \"DEFECTIVE\",\n      \"reasonNote\": \"Нет изображения\"\n    }\n  ]\n}"
+            }
+          }
+        },
+        {
+          "name": "Get return",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/admin/returns/{{returnId}}"
+          }
+        },
+        {
+          "name": "Goods received at warehouse",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/admin/returns/{{returnId}}/receive",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"warehouseId\": \"{{warehouseId}}\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Inspection: decide each line (RESTOCK / SCRAP / REJECT)",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/admin/returns/{{returnId}}/decide",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"items\": [\n    {\n      \"itemId\": \"{{returnItemId}}\",\n      \"decision\": \"RESTOCK\",\n      \"note\": \"Упаковка не вскрыта\"\n    }\n  ]\n}"
+            }
+          }
+        },
+        {
+          "name": "Approve (applies decisions)",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/admin/returns/{{returnId}}/approve"
+          }
+        },
+        {
+          "name": "Refund (accountant)",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/admin/returns/{{returnId}}/refund",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reference\": \"BANK-TX-777\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Cancel",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/admin/returns/{{returnId}}/cancel"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Warranty cases",
+      "item": [
+        {
+          "name": "Warranty check by serial",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/serials/{{serialNumber}}"
+          }
+        },
+        {
+          "name": "Open a case",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code < 300) pm.collectionVariables.set('warrantyCaseId', pm.response.json().id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/admin/warranty-cases",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"serialNumber\": \"{{serialNumber}}\",\n  \"problem\": \"Не включается\"\n}"
+            }
+          }
+        },
+        {
+          "name": "List open cases",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/admin/warranty-cases?status=OPEN"
+          }
+        },
+        {
+          "name": "Get case",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/admin/warranty-cases/{{warrantyCaseId}}"
+          }
+        },
+        {
+          "name": "Unit received from customer",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/admin/warranty-cases/{{warrantyCaseId}}/receive"
+          }
+        },
+        {
+          "name": "Send to service",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/admin/warranty-cases/{{warrantyCaseId}}/send-to-service",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"serviceCenter\": \"Samsung Service Beograd\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Repair completed",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/admin/warranty-cases/{{warrantyCaseId}}/repair-completed",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"note\": \"Заменён блок питания\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Return to customer",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/admin/warranty-cases/{{warrantyCaseId}}/return-to-customer"
+          }
+        },
+        {
+          "name": "Replace with a new unit (manager)",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/admin/warranty-cases/{{warrantyCaseId}}/replace",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"warehouseId\": \"{{warehouseId}}\",\n  \"serialNumber\": \"SN-0003\",\n  \"note\": \"Ремонту не подлежит\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Reject (manager)",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/admin/warranty-cases/{{warrantyCaseId}}/reject",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"note\": \"Механическое повреждение, не гарантийный случай\"\n}"
+            }
           }
         }
       ]

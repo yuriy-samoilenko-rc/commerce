@@ -21,6 +21,8 @@ export interface MoveInput {
   transferId?: string;
   inventoryCountId?: string;
   orderId?: string;
+  returnId?: string;
+  warrantyCaseId?: string;
   /** Required for serial-tracked products, one per unit moved. */
   serialNumbers?: string[];
 }
@@ -28,7 +30,7 @@ export interface MoveInput {
 // Which direction each movement type may go, and what happens to serial-tracked units.
 const RULES: Record<
   StockMovementType,
-  { in?: 'register' | 'arrive'; out?: SerialUnitStatus; newGoods: boolean }
+  { in?: 'register' | 'arrive' | 'restock'; out?: SerialUnitStatus; newGoods: boolean }
 > = {
   RECEIPT: { in: 'register', newGoods: true },
   ADJUSTMENT: { in: 'register', out: SerialUnitStatus.WRITTEN_OFF, newGoods: true },
@@ -38,6 +40,10 @@ const RULES: Record<
   INVENTORY: { in: 'register', out: SerialUnitStatus.WRITTEN_OFF, newGoods: false },
   // Sales only happen through shipOrder(), which also consumes the reservation.
   SALE: { newGoods: false },
+  // An inspected customer return goes back on sale (its units already exist).
+  RETURN: { in: 'restock', newGoods: false },
+  // Only through replaceUnit(): a new unit goes to the customer instead of a faulty one.
+  WARRANTY_REPLACEMENT: { newGoods: false },
 };
 
 const OPEN_COUNT = [InventoryStatus.IN_PROGRESS, InventoryStatus.COUNTED];
@@ -104,6 +110,7 @@ export class StockLedgerService {
     let unitIds: string[];
     if (!incoming) unitIds = await this.takeUnits(tx, productId, warehouseId, serials, rule.out!);
     else if (rule.in === 'arrive') unitIds = await this.arriveUnits(tx, productId, warehouseId, serials);
+    else if (rule.in === 'restock') unitIds = await this.restockUnits(tx, productId, warehouseId, serials);
     else unitIds = await this.registerUnits(tx, productId, warehouseId, serials);
     await this.post(tx, input, unitIds);
   }
@@ -288,6 +295,72 @@ export class StockLedgerService {
     }
   }
 
+  /**
+   * Warranty replacement: a unit from stock goes to the customer, inheriting the sale
+   * date (the warranty continues), and the faulty unit is written off.
+   */
+  async replaceUnit(
+    tx: Tx,
+    input: {
+      faultyUnitId: string;
+      serialNumber: string;
+      warehouseId: string;
+      userId: string;
+      warrantyCaseId: string;
+    },
+  ) {
+    const faulty = await tx.serialUnit.findUniqueOrThrow({
+      where: { id: input.faultyUnitId },
+      select: { productId: true, soldAt: true, orderItemId: true, product: { select: { name: true, categoryId: true } } },
+    });
+    await this.assertNotBeingCounted(tx, input.warehouseId, faulty.product.categoryId, faulty.product.name);
+
+    const replacement = await tx.serialUnit.findFirst({
+      where: {
+        serialNumber: input.serialNumber,
+        productId: faulty.productId,
+        warehouseId: input.warehouseId,
+        status: SerialUnitStatus.IN_STOCK,
+        orderItemId: null,
+      },
+      select: { id: true },
+    });
+    if (!replacement) {
+      throw new BadRequestException(
+        `Serial ${input.serialNumber} is not a free unit of "${faulty.product.name}" on this warehouse's shelf`,
+      );
+    }
+
+    const { count } = await tx.serialUnit.updateMany({
+      where: { id: replacement.id, status: SerialUnitStatus.IN_STOCK, orderItemId: null },
+      data: {
+        status: SerialUnitStatus.SOLD,
+        warehouseId: null,
+        soldAt: faulty.soldAt,
+        orderItemId: faulty.orderItemId,
+      },
+    });
+    if (!count) throw new ConflictException('Serial units were changed by another operation, retry');
+
+    await this.post(
+      tx,
+      {
+        type: StockMovementType.WARRANTY_REPLACEMENT,
+        productId: faulty.productId,
+        warehouseId: input.warehouseId,
+        quantity: -1,
+        userId: input.userId,
+        warrantyCaseId: input.warrantyCaseId,
+      },
+      [replacement.id],
+    );
+    await tx.serialUnit.update({
+      where: { id: input.faultyUnitId },
+      data: { status: SerialUnitStatus.WRITTEN_OFF, warehouseId: null },
+    });
+    return replacement.id;
+  }
+
   private async assertNotBeingCounted(
     tx: Tx,
     warehouseId: string,
@@ -344,6 +417,17 @@ export class StockLedgerService {
     );
   }
 
+  /** Returned units that passed inspection become sellable again, free of the old order. */
+  private restockUnits(tx: Tx, productId: string, warehouseId: string, serials: string[]) {
+    return this.changeUnits(
+      tx,
+      serials,
+      { productId, warehouseId, status: SerialUnitStatus.RETURNED },
+      { status: SerialUnitStatus.IN_STOCK, orderItemId: null },
+      'Not waiting for inspection at this warehouse',
+    );
+  }
+
   /** In-transit units arrive at the destination warehouse. */
   private arriveUnits(tx: Tx, productId: string, warehouseId: string, serials: string[]) {
     return this.changeUnits(
@@ -394,6 +478,8 @@ export class StockLedgerService {
       transferId: input.transferId,
       inventoryCountId: input.inventoryCountId,
       orderId: input.orderId,
+      returnId: input.returnId,
+      warrantyCaseId: input.warrantyCaseId,
     };
 
     if (!serialUnitIds?.length) {

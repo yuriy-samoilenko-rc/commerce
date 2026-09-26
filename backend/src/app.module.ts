@@ -9,11 +9,13 @@ import { OrdersModule } from './orders/orders.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { ProductsModule } from './products/products.module';
 import { ReceivingsModule } from './receivings/receivings.module';
+import { ReturnsModule } from './returns/returns.module';
 import { StockModule } from './stock/stock.module';
 import { SuppliersModule } from './suppliers/suppliers.module';
 import { TransfersModule } from './transfers/transfers.module';
 import { UsersModule } from './users/users.module';
 import { WarehousesModule } from './warehouses/warehouses.module';
+import { WarrantyModule } from './warranty/warranty.module';
 
 @Module({
   imports: [
@@ -30,6 +32,8 @@ import { WarehousesModule } from './warehouses/warehouses.module';
     TransfersModule,
     InventoryModule,
     OrdersModule,
+    ReturnsModule,
+    WarrantyModule,
   ],
   controllers: [AppController],
   providers: [AppService],
