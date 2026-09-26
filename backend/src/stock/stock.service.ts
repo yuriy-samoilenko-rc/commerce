@@ -25,11 +25,12 @@ const movementSelect = {
   receiving: { select: { id: true, number: true } },
   transfer: { select: { id: true, number: true } },
   inventoryCount: { select: { id: true, number: true } },
+  order: { select: { id: true, number: true } },
 } satisfies Prisma.StockMovementSelect;
 
 type MovementRow = Prisma.StockMovementGetPayload<{ select: typeof movementSelect }>;
 
-function documentOf({ receiving, transfer, inventoryCount }: MovementRow) {
+function documentOf({ receiving, transfer, inventoryCount, order }: MovementRow) {
   if (receiving) {
     return { type: 'RECEIVING', id: receiving.id, number: formatReceivingNumber(receiving.number) };
   }
@@ -39,11 +40,12 @@ function documentOf({ receiving, transfer, inventoryCount }: MovementRow) {
   if (inventoryCount) {
     return { type: 'INVENTORY', id: inventoryCount.id, number: formatCountNumber(inventoryCount.number) };
   }
+  if (order) return { type: 'ORDER', id: order.id, number: String(order.number) };
   return null;
 }
 
 function presentMovement(row: MovementRow) {
-  const { serialUnit, receiving: _r, transfer: _t, inventoryCount: _c, ...m } = row;
+  const { serialUnit, receiving: _r, transfer: _t, inventoryCount: _c, order: _o, ...m } = row;
   return { ...m, serialNumber: serialUnit?.serialNumber ?? null, document: documentOf(row) };
 }
 
@@ -128,13 +130,40 @@ export class StockService {
         serialNumber: true,
         status: true,
         createdAt: true,
+        soldAt: true,
         product: { select: { id: true, name: true, sku: true, warrantyMonths: true } },
         warehouse: { select: { id: true, name: true } },
+        orderItem: {
+          select: { order: { select: { id: true, number: true, customerName: true, customerPhone: true } } },
+        },
         movements: { select: movementSelect, orderBy: { createdAt: 'asc' } },
       },
     });
     if (!unit) throw new NotFoundException('Serial number not found');
-    const { movements, ...rest } = unit;
-    return { ...rest, history: movements.map(presentMovement) };
+    const { movements, orderItem, ...rest } = unit;
+    // Answers ТЗ п.16: when, to whom, and until when the warranty runs.
+    const warrantyUntil =
+      unit.soldAt && unit.product.warrantyMonths
+        ? addMonths(unit.soldAt, unit.product.warrantyMonths)
+        : null;
+    return {
+      ...rest,
+      // Before the sale this is the order the unit is picked for.
+      order: orderItem?.order ?? null,
+      warrantyUntil,
+      warrantyActive: warrantyUntil ? warrantyUntil > new Date() : null,
+      history: movements.map(presentMovement),
+    };
   }
+}
+
+function addMonths(date: Date, months: number) {
+  const d = new Date(date);
+  const day = d.getUTCDate();
+  d.setUTCDate(1);
+  d.setUTCMonth(d.getUTCMonth() + months);
+  // 31 Jan + 1 month → 28/29 Feb, not 3 Mar
+  const lastDay = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)).getUTCDate();
+  d.setUTCDate(Math.min(day, lastDay));
+  return d;
 }

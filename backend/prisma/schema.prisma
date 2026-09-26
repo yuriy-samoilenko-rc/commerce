@@ -180,6 +180,7 @@ enum StockMovementType {
   TRANSFER_OUT
   TRANSFER_IN
   INVENTORY
+  SALE
 }
 
 // Журнал движений (п.27 ТЗ). Строки только добавляются: UPDATE и DELETE запрещены
@@ -217,12 +218,16 @@ model StockMovement {
   inventoryCountId String?
   inventoryCount   InventoryCount? @relation(fields: [inventoryCountId], references: [id])
 
+  orderId String?
+  order   Order?  @relation(fields: [orderId], references: [id])
+
   @@index([productId, createdAt])
   @@index([warehouseId, createdAt])
   @@index([serialUnitId])
   @@index([receivingId])
   @@index([transferId])
   @@index([inventoryCountId])
+  @@index([orderId])
   @@map("stock_movements")
 }
 
@@ -230,6 +235,7 @@ enum SerialUnitStatus {
   IN_STOCK
   IN_TRANSIT
   WRITTEN_OFF
+  SOLD
 }
 
 // Конкретный экземпляр товара с серийным номером (п.4, п.12 ТЗ).
@@ -246,9 +252,16 @@ model SerialUnit {
   warehouseId String?
   warehouse   Warehouse? @relation(fields: [warehouseId], references: [id])
 
+  // Закреплён за строкой заказа при сборке; после продажи ссылка остаётся как история.
+  orderItemId String?
+  orderItem   OrderItem? @relation(fields: [orderItemId], references: [id])
+  // Дата продажи = начало гарантии (п.16 ТЗ)
+  soldAt      DateTime?
+
   movements StockMovement[]
 
   @@index([productId, warehouseId, status])
+  @@index([orderItemId])
   @@map("serial_units")
 }
 
@@ -455,6 +468,11 @@ model InventorySerial {
 enum OrderStatus {
   NEW
   CONFIRMED
+  PICKING
+  READY_TO_SHIP
+  SHIPPED
+  DELIVERED
+  COMPLETED
   CANCELLED
 }
 
@@ -507,6 +525,12 @@ model Order {
   cancelReason         String?
   paidAt               DateTime?
 
+  carrier        String?
+  trackingNumber String?
+  shippedAt      DateTime?
+  deliveredAt    DateTime?
+  completedAt    DateTime?
+
   userId String?
   user   User?   @relation("OrderCustomer", fields: [userId], references: [id])
 
@@ -516,8 +540,9 @@ model Order {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  items  OrderItem[]
-  events OrderEvent[]
+  items     OrderItem[]
+  events    OrderEvent[]
+  movements StockMovement[]
 
   @@index([status, reservationExpiresAt])
   @@index([userId, createdAt])
@@ -541,6 +566,7 @@ model OrderItem {
   productId String
   product   Product @relation(fields: [productId], references: [id])
 
+  serialUnits  SerialUnit[]
   reservations StockReservation[]
 
   @@index([orderId])
@@ -551,11 +577,13 @@ model OrderItem {
 // Резерв конкретного количества на конкретном складе под строку заказа.
 // Активен, пока releasedAt = null. stock.reserved = сумма активных резервов.
 model StockReservation {
-  id            String    @id @default(uuid())
-  quantity      Int
-  createdAt     DateTime  @default(now())
-  releasedAt    DateTime?
-  releaseReason String?
+  id             String    @id @default(uuid())
+  quantity       Int
+  // сколько из зарезервированного уже собрано (отсканировано) на этом складе
+  pickedQuantity Int       @default(0)
+  createdAt      DateTime  @default(now())
+  releasedAt     DateTime?
+  releaseReason  String?
 
   orderItemId String
   orderItem   OrderItem @relation(fields: [orderItemId], references: [id])
@@ -577,6 +605,11 @@ enum OrderEventType {
   PAID
   CANCELLED
   EXPIRED
+  PICKING_STARTED
+  PICKING_COMPLETED
+  SHIPPED
+  DELIVERED
+  COMPLETED
 }
 
 // История заказа (order_status_history в п.26 ТЗ): что произошло, когда и кто это сделал.

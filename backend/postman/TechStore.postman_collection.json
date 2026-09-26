@@ -1260,6 +1260,128 @@
           }
         }
       ]
+    },
+    {
+      "name": "Fulfillment (picking & shipping)",
+      "item": [
+        {
+          "name": "Start picking (paid or cash on delivery)",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/admin/orders/{{orderId}}/start-picking"
+          }
+        },
+        {
+          "name": "Picking tasks for a warehouse (phone)",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/admin/picking?warehouseId={{warehouseId}}"
+          }
+        },
+        {
+          "name": "Pick sheet",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/admin/orders/{{orderId}}/pick-sheet?warehouseId={{warehouseId}}"
+          }
+        },
+        {
+          "name": "Scan: serial number",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/admin/orders/{{orderId}}/pick",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"{{serialNumber}}\",\n  \"warehouseId\": \"{{warehouseId}}\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Scan: barcode, 2 units",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/admin/orders/{{orderId}}/pick",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"8801234567890\",\n  \"warehouseId\": \"{{warehouseId}}\",\n  \"quantity\": 2\n}"
+            }
+          }
+        },
+        {
+          "name": "Undo a wrong scan",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/admin/orders/{{orderId}}/unpick",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"{{serialNumber}}\",\n  \"warehouseId\": \"{{warehouseId}}\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Complete picking",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/admin/orders/{{orderId}}/complete-picking"
+          }
+        },
+        {
+          "name": "Hand over to courier (writes off stock)",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/admin/orders/{{orderId}}/ship",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"carrier\": \"D Express\",\n  \"trackingNumber\": \"DE123456789\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Delivered",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/admin/orders/{{orderId}}/deliver"
+          }
+        },
+        {
+          "name": "Complete (must be paid)",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/admin/orders/{{orderId}}/complete"
+          }
+        },
+        {
+          "name": "Warranty check by serial",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/serials/{{serialNumber}}"
+          }
+        }
+      ]
     }
   ]
 }

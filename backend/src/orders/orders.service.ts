@@ -15,13 +15,19 @@ import {
   PaymentStatus,
   Prisma,
   Role,
+  SerialUnitStatus,
 } from '../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { StockLedgerService, Tx } from '../stock/stock-ledger.service';
 import { CheckoutDto, ManualOrderDto, OrderItemDto, OrderQueryDto } from './dto/order.dto';
 import { DELIVERY_FEES, reservationTtlMs } from './order-settings';
 
-const OPEN = [OrderStatus.NEW, OrderStatus.CONFIRMED];
+/** Not yet being picked: the customer may still cancel, and the reservation may expire. */
+export const EARLY = [OrderStatus.NEW, OrderStatus.CONFIRMED];
+/** Goods have not left the warehouse yet. */
+export const CANCELLABLE = [...EARLY, OrderStatus.PICKING, OrderStatus.READY_TO_SHIP];
+/** Payment can arrive at any point until the order is closed (e.g. cash to the courier). */
+const PAYABLE = [...CANCELLABLE, OrderStatus.SHIPPED, OrderStatus.DELIVERED];
 
 const orderFields = {
   id: true,
@@ -42,6 +48,11 @@ const orderFields = {
   reservationExpiresAt: true,
   cancelReason: true,
   paidAt: true,
+  carrier: true,
+  trackingNumber: true,
+  shippedAt: true,
+  deliveredAt: true,
+  completedAt: true,
   createdAt: true,
   updatedAt: true,
 } satisfies Prisma.OrderSelect;
@@ -60,7 +71,13 @@ const itemFields = {
 // What the buyer sees: no warehouses, no staff names.
 const customerSelect = {
   ...orderFields,
-  items: { select: itemFields, orderBy: { productName: 'asc' } },
+  items: {
+    select: {
+      ...itemFields,
+      serialUnits: { where: { status: SerialUnitStatus.SOLD }, select: { serialNumber: true } },
+    },
+    orderBy: { productName: 'asc' },
+  },
   events: { select: { type: true, createdAt: true }, orderBy: { createdAt: 'asc' } },
 } satisfies Prisma.OrderSelect;
 
@@ -71,9 +88,11 @@ const staffSelect = {
   items: {
     select: {
       ...itemFields,
+      serialUnits: { select: { serialNumber: true, status: true } },
       reservations: {
         select: {
           quantity: true,
+          pickedQuantity: true,
           createdAt: true,
           releasedAt: true,
           releaseReason: true,
@@ -220,7 +239,7 @@ export class OrdersService {
   async markPaid(id: string, staffId: string) {
     await this.prisma.$transaction(async (tx) => {
       const { count } = await tx.order.updateMany({
-        where: { id, status: { in: OPEN }, paymentStatus: PaymentStatus.UNPAID },
+        where: { id, status: { in: PAYABLE }, paymentStatus: PaymentStatus.UNPAID },
         data: { paymentStatus: PaymentStatus.PAID, paidAt: new Date(), reservationExpiresAt: null },
       });
       if (!count) throw wrongState(await this.getOrThrow(tx, id), 'marked as paid');
@@ -233,22 +252,25 @@ export class OrdersService {
     await this.prisma.$transaction(async (tx) => {
       const order = await this.getOrThrow(tx, id);
       const note = order.paymentStatus === PaymentStatus.PAID ? `${reason} (paid: refund required)` : reason;
-      await this.cancelIn(tx, id, { status: { in: OPEN } }, note, OrderEventType.CANCELLED, staffId);
+      await this.cancelIn(tx, id, { status: { in: CANCELLABLE } }, note, OrderEventType.CANCELLED, staffId);
     });
     return this.findForStaff(id);
   }
 
   async cancelByCustomer(id: string, userId: string, reason?: string) {
     await this.prisma.$transaction(async (tx) => {
-      const order = await tx.order.findFirst({ where: { id, userId }, select: { paymentStatus: true } });
+      const order = await tx.order.findFirst({ where: { id, userId }, select: { status: true, paymentStatus: true } });
       if (!order) throw new NotFoundException('Order not found');
       if (order.paymentStatus === PaymentStatus.PAID) {
         throw new ConflictException('A paid order can only be cancelled by the store, which will issue a refund');
       }
+      if (order.status !== OrderStatus.NEW && order.status !== OrderStatus.CONFIRMED) {
+        throw new ConflictException('The order is already being prepared; please contact the store');
+      }
       await this.cancelIn(
         tx,
         id,
-        { status: { in: OPEN }, userId, paymentStatus: PaymentStatus.UNPAID },
+        { status: { in: EARLY }, userId, paymentStatus: PaymentStatus.UNPAID },
         reason?.trim() || 'Cancelled by customer',
         OrderEventType.CANCELLED,
         userId,
@@ -260,7 +282,7 @@ export class OrdersService {
   /** Cancels unpaid/unconfirmed orders whose reservation timer ran out. Returns how many. */
   async expireDue(now = new Date()) {
     const due: Prisma.OrderWhereInput = {
-      status: { in: OPEN },
+      status: { in: EARLY },
       paymentStatus: PaymentStatus.UNPAID,
       reservationExpiresAt: { lte: now },
     };
@@ -356,7 +378,7 @@ export class OrdersService {
   }
 }
 
-function wrongState(order: { status: OrderStatus; paymentStatus: PaymentStatus }, action: string) {
+export function wrongState(order: { status: OrderStatus; paymentStatus: PaymentStatus }, action: string) {
   return new ConflictException(
     `Order is ${order.status} / ${order.paymentStatus} and cannot be ${action}`,
   );

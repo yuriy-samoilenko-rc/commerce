@@ -20,6 +20,7 @@ export interface MoveInput {
   receivingId?: string;
   transferId?: string;
   inventoryCountId?: string;
+  orderId?: string;
   /** Required for serial-tracked products, one per unit moved. */
   serialNumbers?: string[];
 }
@@ -35,6 +36,8 @@ const RULES: Record<
   TRANSFER_IN: { in: 'arrive', newGoods: false },
   // Found surplus is registered even if archived: it physically exists.
   INVENTORY: { in: 'register', out: SerialUnitStatus.WRITTEN_OFF, newGoods: false },
+  // Sales only happen through shipOrder(), which also consumes the reservation.
+  SALE: { newGoods: false },
 };
 
 const OPEN_COUNT = [InventoryStatus.IN_PROGRESS, InventoryStatus.COUNTED];
@@ -164,6 +167,11 @@ export class StockLedgerService {
       where: { orderItem: { orderId }, releasedAt: null },
       select: { id: true, productId: true, warehouseId: true, quantity: true },
     });
+    // Units already picked for this order go back to the shelf, free for anyone.
+    await tx.serialUnit.updateMany({
+      where: { orderItem: { orderId }, status: SerialUnitStatus.IN_STOCK },
+      data: { orderItemId: null },
+    });
     if (!active.length) return;
 
     const { count } = await tx.stockReservation.updateMany({
@@ -177,6 +185,106 @@ export class StockLedgerService {
       await tx.$executeRaw`
         UPDATE "stock" SET "reserved" = "reserved" - ${r.quantity}, "updatedAt" = now()
         WHERE "productId" = ${r.productId} AND "warehouseId" = ${r.warehouseId}`;
+    }
+  }
+
+  /**
+   * Picking a serial-tracked unit ties it to an order line. It stays IN_STOCK (it is
+   * physically still here, so inventory sees it) but can no longer be moved or written off.
+   */
+  async linkUnit(
+    tx: Tx,
+    input: { serialNumber: string; productId: string; warehouseId: string; orderItemId: string },
+  ) {
+    const { serialNumber, productId, warehouseId, orderItemId } = input;
+    const { count } = await tx.serialUnit.updateMany({
+      where: { serialNumber, productId, warehouseId, status: SerialUnitStatus.IN_STOCK, orderItemId: null },
+      data: { orderItemId },
+    });
+    if (count) return;
+
+    const unit = await tx.serialUnit.findUnique({
+      where: { serialNumber },
+      select: { productId: true, warehouseId: true, status: true, orderItemId: true },
+    });
+    if (!unit) throw new BadRequestException(`Serial ${serialNumber} is not registered`);
+    if (unit.productId !== productId) {
+      throw new BadRequestException(`Serial ${serialNumber} belongs to another product`);
+    }
+    if (unit.orderItemId === orderItemId) {
+      throw new ConflictException(`Serial ${serialNumber} is already picked for this order`);
+    }
+    if (unit.orderItemId && unit.status === SerialUnitStatus.IN_STOCK) {
+      throw new ConflictException(`Serial ${serialNumber} is already picked for another order`);
+    }
+    throw new ConflictException(`Serial ${serialNumber} is not on the shelf of this warehouse (${unit.status})`);
+  }
+
+  async unlinkUnit(tx: Tx, serialNumber: string, orderItemId: string) {
+    const { count } = await tx.serialUnit.updateMany({
+      where: { serialNumber, orderItemId, status: SerialUnitStatus.IN_STOCK },
+      data: { orderItemId: null },
+    });
+    if (!count) throw new BadRequestException(`Serial ${serialNumber} is not picked for this order`);
+  }
+
+  /**
+   * Goods leave the company: every active reservation of the order becomes a SALE.
+   * Quantity and reservation go down together, and picked units become SOLD.
+   */
+  async shipOrder(tx: Tx, orderId: string, userId: string, soldAt: Date) {
+    const reservations = await tx.stockReservation.findMany({
+      where: { orderItem: { orderId }, releasedAt: null },
+      select: {
+        id: true,
+        productId: true,
+        warehouseId: true,
+        quantity: true,
+        pickedQuantity: true,
+        orderItemId: true,
+        product: { select: { name: true, trackSerial: true, categoryId: true } },
+      },
+    });
+    if (!reservations.length) throw new ConflictException('Order has no reserved stock to ship');
+
+    for (const r of reservations) {
+      const { name, trackSerial, categoryId } = r.product;
+      if (r.pickedQuantity !== r.quantity) throw new ConflictException(`"${name}" is not fully picked`);
+      await this.assertNotBeingCounted(tx, r.warehouseId, categoryId, name);
+
+      let unitIds: string[] | undefined;
+      if (trackSerial) {
+        const units = await tx.serialUnit.findMany({
+          where: { orderItemId: r.orderItemId, warehouseId: r.warehouseId, status: SerialUnitStatus.IN_STOCK },
+          select: { id: true },
+        });
+        if (units.length !== r.quantity) {
+          throw new ConflictException(`"${name}": ${units.length} of ${r.quantity} serial numbers picked`);
+        }
+        unitIds = units.map((u) => u.id);
+        const { count } = await tx.serialUnit.updateMany({
+          where: { id: { in: unitIds }, status: SerialUnitStatus.IN_STOCK, orderItemId: r.orderItemId },
+          data: { status: SerialUnitStatus.SOLD, warehouseId: null, soldAt },
+        });
+        if (count !== unitIds.length) {
+          throw new ConflictException('Serial units were changed by another operation, retry');
+        }
+      }
+
+      await this.post(
+        tx,
+        { type: StockMovementType.SALE, productId: r.productId, warehouseId: r.warehouseId, quantity: -r.quantity, userId, orderId },
+        unitIds,
+        true,
+      );
+    }
+
+    const { count } = await tx.stockReservation.updateMany({
+      where: { id: { in: reservations.map((r) => r.id) }, releasedAt: null },
+      data: { releasedAt: soldAt, releaseReason: 'Shipped' },
+    });
+    if (count !== reservations.length) {
+      throw new ConflictException('Reservations were changed by another operation, retry');
     }
   }
 
@@ -230,9 +338,9 @@ export class StockLedgerService {
     return this.changeUnits(
       tx,
       serials,
-      { productId, warehouseId, status: SerialUnitStatus.IN_STOCK },
+      { productId, warehouseId, status: SerialUnitStatus.IN_STOCK, orderItemId: null },
       { status: newStatus, warehouseId: null },
-      'Not in stock at this warehouse',
+      'Not in stock at this warehouse (or picked for an order)',
     );
   }
 
@@ -272,8 +380,10 @@ export class StockLedgerService {
     return ids;
   }
 
-  private async post(tx: Tx, input: MoveInput, serialUnitIds?: string[]) {
-    const balance = await this.applyDelta(tx, input.productId, input.warehouseId, input.quantity);
+  private async post(tx: Tx, input: MoveInput, serialUnitIds?: string[], fromReserved = false) {
+    const balance = fromReserved
+      ? await this.consumeReserved(tx, input.productId, input.warehouseId, -input.quantity)
+      : await this.applyDelta(tx, input.productId, input.warehouseId, input.quantity);
     const base = {
       type: input.type,
       productId: input.productId,
@@ -283,6 +393,7 @@ export class StockLedgerService {
       receivingId: input.receivingId,
       transferId: input.transferId,
       inventoryCountId: input.inventoryCountId,
+      orderId: input.orderId,
     };
 
     if (!serialUnitIds?.length) {
@@ -303,6 +414,18 @@ export class StockLedgerService {
         serialUnitId,
       })),
     });
+  }
+
+  /** Shipping reserved goods: on-hand and reserved drop together in one statement. */
+  private async consumeReserved(tx: Tx, productId: string, warehouseId: string, units: number) {
+    const rows = await tx.$queryRaw<{ quantity: number }[]>`
+      UPDATE "stock"
+      SET "quantity" = "quantity" - ${units}, "reserved" = "reserved" - ${units}, "updatedAt" = now()
+      WHERE "productId" = ${productId} AND "warehouseId" = ${warehouseId}
+        AND "reserved" >= ${units}
+      RETURNING "quantity"`;
+    if (!rows.length) throw new ConflictException('Reserved stock does not match the order, retry');
+    return rows[0].quantity;
   }
 
   // Single-statement updates: the database applies them atomically and holds a row
