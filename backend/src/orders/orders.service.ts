@@ -22,6 +22,8 @@ import {
   SerialUnitStatus,
 } from '../generated/prisma/client';
 import { DocumentsService } from '../documents/documents.service';
+import { MailService } from '../mail/mail.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { StockLedgerService, Tx } from '../stock/stock-ledger.service';
 import {
@@ -168,6 +170,8 @@ export class OrdersService {
     private readonly prisma: PrismaService,
     private readonly ledger: StockLedgerService,
     private readonly documents: DocumentsService,
+    private readonly notifications: NotificationsService,
+    private readonly mail: MailService,
   ) {}
 
   // ---------- placing ----------
@@ -286,6 +290,8 @@ export class OrdersService {
           quantity: item.quantity,
         });
       }
+      await this.notifications.orderEvent(tx, 'ORDER_NEW', order.id);
+      await this.mail.orderEmail(tx, 'RECEIVED', order.id);
       return order.id;
     }, LONG_TX);
   }
@@ -310,7 +316,13 @@ export class OrdersService {
       await tx.orderEvent.create({
         data: { orderId: id, type: OrderEventType.CONFIRMED, userId: staffId },
       });
-      await this.documents.issue(tx, DocumentType.INVOICE, id, staffId);
+      const invoiceId = await this.documents.issue(
+        tx,
+        DocumentType.INVOICE,
+        id,
+        staffId,
+      );
+      await this.mail.orderEmail(tx, 'CONFIRMED', id, [invoiceId]);
     });
     return this.findForStaff(id);
   }
@@ -334,6 +346,7 @@ export class OrdersService {
       await tx.orderEvent.create({
         data: { orderId: id, type: OrderEventType.PAID, userId: staffId },
       });
+      await this.notifications.orderEvent(tx, 'ORDER_PAID', id);
     });
     return this.findForStaff(id);
   }
@@ -343,7 +356,7 @@ export class OrdersService {
       const order = await this.getOrThrow(tx, id);
       const note =
         order.paymentStatus === PaymentStatus.PAID
-          ? `${reason} (paid: refund required)`
+          ? `${reason} (plaćeno: potreban povraćaj novca)`
           : reason;
       await this.cancelIn(
         tx,
@@ -381,7 +394,7 @@ export class OrdersService {
         tx,
         id,
         { status: { in: EARLY }, userId, paymentStatus: PaymentStatus.UNPAID },
-        reason?.trim() || 'Cancelled by customer',
+        reason?.trim() || 'Otkazao kupac',
         OrderEventType.CANCELLED,
         userId,
       );
@@ -409,7 +422,7 @@ export class OrdersService {
           tx,
           id,
           due,
-          'Reservation expired: not paid or confirmed in time',
+          'Rezervacija je istekla: narudžba nije plaćena ili potvrđena na vrijeme',
           OrderEventType.EXPIRED,
           null,
           false,
@@ -443,6 +456,7 @@ export class OrdersService {
     }
     await this.ledger.releaseReservations(tx, id, reason);
     await this.documents.cancelOrderInvoices(tx, id, reason);
+    await this.mail.orderEmail(tx, 'CANCELLED', id);
     await tx.orderEvent.create({
       data: { orderId: id, type: event, note: reason, userId },
     });

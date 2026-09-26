@@ -7,7 +7,7 @@ import {
 import { CategoriesService } from '../categories/categories.service';
 import { formatCountNumber } from '../common/document-numbers';
 import { pageArgs } from '../common/dto/pagination-query.dto';
-import { LONG_TX } from '../common/transactions';
+import { LONG_TX, inSequence } from '../common/transactions';
 import {
   DocumentType,
   InventoryStatus,
@@ -356,7 +356,7 @@ export class InventoryService {
         warehouseId: count.warehouseId,
         userId,
         inventoryCountId: id,
-        reason: `Inventory ${formatCountNumber(count.number)}`,
+        reason: `Popis ${formatCountNumber(count.number)}`,
       };
 
       for (const row of await this.computeDiff(tx, count)) {
@@ -411,24 +411,27 @@ export class InventoryService {
     const inScope: Prisma.ProductWhereInput = count.scopeCategoryIds.length
       ? { categoryId: { in: count.scopeCategoryIds } }
       : {};
-    const [stock, lines, scanned] = await Promise.all([
-      db.stock.findMany({
-        where: {
-          warehouseId: count.warehouseId,
-          quantity: { gt: 0 },
-          product: inScope,
-        },
-        select: { productId: true, quantity: true },
-      }),
-      db.inventoryLine.findMany({
-        where: { countId: count.id },
-        select: { productId: true, countedQuantity: true },
-      }),
-      db.inventorySerial.findMany({
-        where: { countId: count.id },
-        select: { productId: true, serialNumber: true },
-      }),
-    ]);
+    const [stock, lines, scanned] = await inSequence(
+      () =>
+        db.stock.findMany({
+          where: {
+            warehouseId: count.warehouseId,
+            quantity: { gt: 0 },
+            product: inScope,
+          },
+          select: { productId: true, quantity: true },
+        }),
+      () =>
+        db.inventoryLine.findMany({
+          where: { countId: count.id },
+          select: { productId: true, countedQuantity: true },
+        }),
+      () =>
+        db.inventorySerial.findMany({
+          where: { countId: count.id },
+          select: { productId: true, serialNumber: true },
+        }),
+    );
 
     const expectedQty = new Map(stock.map((s) => [s.productId, s.quantity]));
     const countedQty = new Map(

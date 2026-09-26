@@ -40,7 +40,10 @@ export class AdminProductsController {
   }
 
   @Get(':id')
-  findOne(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: PublicUser) {
+  findOne(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: PublicUser,
+  ) {
     return this.products.findStaff(id, canSeeCost(user));
   }
 
@@ -52,7 +55,10 @@ export class AdminProductsController {
 
   @Roles(Role.ADMIN)
   @Patch(':id')
-  update(@Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateProductDto) {
+  update(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateProductDto,
+  ) {
     return this.products.update(id, dto);
   }
 

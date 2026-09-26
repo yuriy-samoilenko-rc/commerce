@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { Type } from 'class-transformer';
 import {
   IsEmail,
+  IsInt,
   IsNumber,
   IsOptional,
   IsString,
@@ -35,6 +36,13 @@ export class UpdateCompanySettingsDto {
   @Min(0)
   @Max(100)
   defaultVatPercent?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @Max(100_000)
+  lowStockThreshold?: number;
 }
 
 const ID = 1;
@@ -46,9 +54,20 @@ export class CompanySettingsService {
     private readonly audit: AuditService,
   ) {}
 
-  /** The migration creates the row; upsert keeps a freshly reset database working too. */
-  get(db: Tx | PrismaService = this.prisma) {
-    return db.companySettings.upsert({
+  /**
+   * Plain read, safe inside any transaction. (An upsert would lock the single settings
+   * row until commit and make every stock/document transaction wait for each other.)
+   * The migration creates the row; ensureRow() covers a freshly reset database.
+   */
+  async get(db: Tx | PrismaService = this.prisma) {
+    return (
+      (await db.companySettings.findUnique({ where: { id: ID } })) ??
+      this.ensureRow()
+    );
+  }
+
+  private ensureRow() {
+    return this.prisma.companySettings.upsert({
       where: { id: ID },
       create: { id: ID },
       update: {},
@@ -56,7 +75,7 @@ export class CompanySettingsService {
   }
 
   async update(dto: UpdateCompanySettingsDto) {
-    await this.get();
+    await this.ensureRow();
     return this.audit.trackUpdate(
       () => this.prisma.companySettings.findUnique({ where: { id: ID } }),
       () =>

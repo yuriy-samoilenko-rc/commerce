@@ -7,6 +7,8 @@ import { BrandsModule } from './brands/brands.module';
 import { CategoriesModule } from './categories/categories.module';
 import { DocumentsModule } from './documents/documents.module';
 import { InventoryModule } from './inventory/inventory.module';
+import { MailModule } from './mail/mail.module';
+import { NotificationsModule } from './notifications/notifications.module';
 import { OrdersModule } from './orders/orders.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { ProductsModule } from './products/products.module';
@@ -26,6 +28,8 @@ import { WarrantyModule } from './warranty/warranty.module';
     AuditModule,
     SettingsModule,
     DocumentsModule,
+    NotificationsModule,
+    MailModule,
     UsersModule,
     AuthModule,
     CategoriesModule,

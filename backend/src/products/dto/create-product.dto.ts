@@ -83,6 +83,13 @@ export class CreateProductDto {
   @Max(600)
   warrantyMonths?: number | null;
 
+  /** "Low stock" alert level for this product; empty = company default. */
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(100_000)
+  lowStockThreshold?: number | null;
+
   @IsUUID()
   categoryId: string;
 

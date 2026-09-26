@@ -5,7 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { pageArgs } from '../common/dto/pagination-query.dto';
-import { LONG_TX } from '../common/transactions';
+import { LONG_TX, inSequence } from '../common/transactions';
 import {
   DocumentType,
   Prisma,
@@ -13,6 +13,7 @@ import {
   StockMovementType,
 } from '../generated/prisma/client';
 import { DocumentsService } from '../documents/documents.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { cleanSerials, validateDocumentItems } from '../stock/document-items';
 import { StockLedgerService, Tx } from '../stock/stock-ledger.service';
@@ -73,6 +74,7 @@ export class ReceivingsService {
     private readonly prisma: PrismaService,
     private readonly ledger: StockLedgerService,
     private readonly documents: DocumentsService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   async list(q: ReceivingQueryDto) {
@@ -190,6 +192,7 @@ export class ReceivingsService {
         });
       }
       await this.documents.issue(tx, DocumentType.RECEIVING_NOTE, id, userId);
+      await this.notifications.receivingConfirmed(tx, id);
     }, LONG_TX);
     return this.findOne(id);
   }
@@ -221,16 +224,18 @@ export class ReceivingsService {
     supplierId: string,
     warehouseId: string,
   ) {
-    const [supplier, warehouse] = await Promise.all([
-      tx.supplier.findUnique({
-        where: { id: supplierId },
-        select: { isActive: true },
-      }),
-      tx.warehouse.findUnique({
-        where: { id: warehouseId },
-        select: { isActive: true },
-      }),
-    ]);
+    const [supplier, warehouse] = await inSequence(
+      () =>
+        tx.supplier.findUnique({
+          where: { id: supplierId },
+          select: { isActive: true },
+        }),
+      () =>
+        tx.warehouse.findUnique({
+          where: { id: warehouseId },
+          select: { isActive: true },
+        }),
+    );
     if (!supplier) throw new BadRequestException('Supplier not found');
     if (!supplier.isActive)
       throw new BadRequestException('Supplier is inactive');

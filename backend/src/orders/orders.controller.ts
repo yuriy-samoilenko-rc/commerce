@@ -34,7 +34,10 @@ export class OrdersController {
   }
 
   @Get(':id')
-  findOne(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: PublicUser) {
+  findOne(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: PublicUser,
+  ) {
     return this.orders.findForCustomer(id, user.id);
   }
 

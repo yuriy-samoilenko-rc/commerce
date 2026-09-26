@@ -50,7 +50,9 @@ export class CheckoutDto {
   @MaxLength(100)
   customerName: string;
 
-  @Matches(/^\+?[0-9 ()-]{6,20}$/, { message: 'customerPhone must be a phone number' })
+  @Matches(/^\+?[0-9 ()-]{6,20}$/, {
+    message: 'customerPhone must be a phone number',
+  })
   customerPhone: string;
 
   @IsOptional()

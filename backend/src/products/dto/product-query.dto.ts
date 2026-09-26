@@ -1,8 +1,21 @@
 import { Type } from 'class-transformer';
-import { IsIn, IsNumber, IsOptional, IsString, IsUUID, MaxLength, Min } from 'class-validator';
+import {
+  IsIn,
+  IsNumber,
+  IsOptional,
+  IsString,
+  IsUUID,
+  MaxLength,
+  Min,
+} from 'class-validator';
 import { PaginationQueryDto } from '../../common/dto/pagination-query.dto';
 
-export const PRODUCT_SORTS = ['newest', 'price_asc', 'price_desc', 'name'] as const;
+export const PRODUCT_SORTS = [
+  'newest',
+  'price_asc',
+  'price_desc',
+  'name',
+] as const;
 export type ProductSort = (typeof PRODUCT_SORTS)[number];
 
 export class ProductQueryDto extends PaginationQueryDto {

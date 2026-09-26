@@ -49,14 +49,20 @@ export class AdminOrdersController {
   @Roles(...ORDER_MANAGERS)
   @Post(':id/confirm')
   @HttpCode(HttpStatus.OK)
-  confirm(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: PublicUser) {
+  confirm(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: PublicUser,
+  ) {
     return this.orders.confirm(id, user.id);
   }
 
   @Roles(Role.ADMIN, Role.MANAGER, Role.ACCOUNTANT)
   @Post(':id/mark-paid')
   @HttpCode(HttpStatus.OK)
-  markPaid(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: PublicUser) {
+  markPaid(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: PublicUser,
+  ) {
     return this.orders.markPaid(id, user.id);
   }
 
@@ -76,12 +82,18 @@ export class AdminOrdersController {
   @Roles(...ORDER_MANAGERS)
   @Post(':id/start-picking')
   @HttpCode(HttpStatus.OK)
-  startPicking(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: PublicUser) {
+  startPicking(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: PublicUser,
+  ) {
     return this.fulfillment.startPicking(id, user.id);
   }
 
   @Get(':id/pick-sheet')
-  pickSheet(@Param('id', ParseUUIDPipe) id: string, @Query() query: WarehouseFilterDto) {
+  pickSheet(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query() query: WarehouseFilterDto,
+  ) {
     return this.fulfillment.pickSheet(id, query.warehouseId);
   }
 
@@ -102,28 +114,41 @@ export class AdminOrdersController {
   @Roles(...WAREHOUSE_STAFF)
   @Post(':id/complete-picking')
   @HttpCode(HttpStatus.OK)
-  completePicking(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: PublicUser) {
+  completePicking(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: PublicUser,
+  ) {
     return this.fulfillment.completePicking(id, user.id);
   }
 
   @Roles(...WAREHOUSE_STAFF)
   @Post(':id/ship')
   @HttpCode(HttpStatus.OK)
-  ship(@Param('id', ParseUUIDPipe) id: string, @Body() dto: ShipDto, @CurrentUser() user: PublicUser) {
+  ship(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: ShipDto,
+    @CurrentUser() user: PublicUser,
+  ) {
     return this.fulfillment.ship(id, dto, user.id);
   }
 
   @Roles(...WAREHOUSE_STAFF)
   @Post(':id/deliver')
   @HttpCode(HttpStatus.OK)
-  deliver(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: PublicUser) {
+  deliver(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: PublicUser,
+  ) {
     return this.fulfillment.deliver(id, user.id);
   }
 
   @Roles(...ORDER_MANAGERS)
   @Post(':id/complete')
   @HttpCode(HttpStatus.OK)
-  complete(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: PublicUser) {
+  complete(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: PublicUser,
+  ) {
     return this.fulfillment.complete(id, user.id);
   }
 }

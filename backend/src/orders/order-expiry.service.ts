@@ -12,7 +12,9 @@ import { OrdersService } from './orders.service';
  * Safe to run on several servers at once: each cancellation re-checks the order state.
  */
 @Injectable()
-export class OrderExpiryService implements OnApplicationBootstrap, OnApplicationShutdown {
+export class OrderExpiryService
+  implements OnApplicationBootstrap, OnApplicationShutdown
+{
   private readonly logger = new Logger(OrderExpiryService.name);
   private timer?: NodeJS.Timeout;
   private running = false;
@@ -20,7 +22,10 @@ export class OrderExpiryService implements OnApplicationBootstrap, OnApplication
   constructor(private readonly orders: OrdersService) {}
 
   onApplicationBootstrap() {
-    this.timer = setInterval(() => void this.tick(), orderSettings().expiryCheckMs);
+    this.timer = setInterval(
+      () => void this.tick(),
+      orderSettings().expiryCheckMs,
+    );
   }
 
   onApplicationShutdown() {
@@ -32,9 +37,15 @@ export class OrderExpiryService implements OnApplicationBootstrap, OnApplication
     this.running = true;
     try {
       const expired = await this.orders.expireDue();
-      if (expired) this.logger.log(`Cancelled ${expired} order(s) with expired reservations`);
+      if (expired)
+        this.logger.log(
+          `Cancelled ${expired} order(s) with expired reservations`,
+        );
     } catch (e) {
-      this.logger.error('Order expiry check failed', e instanceof Error ? e.stack : e);
+      this.logger.error(
+        'Order expiry check failed',
+        e instanceof Error ? e.stack : e,
+      );
     } finally {
       this.running = false;
     }

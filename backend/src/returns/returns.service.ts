@@ -9,7 +9,7 @@ import {
   pageArgs,
   PaginationQueryDto,
 } from '../common/dto/pagination-query.dto';
-import { LONG_TX } from '../common/transactions';
+import { LONG_TX, inSequence } from '../common/transactions';
 import {
   DocumentType,
   OrderEventType,
@@ -23,6 +23,8 @@ import {
   StockMovementType,
 } from '../generated/prisma/client';
 import { DocumentsService } from '../documents/documents.service';
+import { MailService } from '../mail/mail.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { cleanSerials } from '../stock/document-items';
 import { StockLedgerService, Tx } from '../stock/stock-ledger.service';
@@ -110,6 +112,8 @@ export class ReturnsService {
     private readonly prisma: PrismaService,
     private readonly ledger: StockLedgerService,
     private readonly documents: DocumentsService,
+    private readonly notifications: NotificationsService,
+    private readonly mail: MailService,
   ) {}
 
   async create(orderId: string, dto: CreateReturnDto, actor: Actor) {
@@ -154,6 +158,7 @@ export class ReturnsService {
         },
         select: { id: true },
       });
+      await this.notifications.returnRequested(tx, created.id);
       return created.id;
     });
     return actor.customer
@@ -283,7 +288,8 @@ export class ReturnsService {
             quantity: line.quantity,
             serialNumbers: line.serialNumbers,
             reason:
-              line.inspectionNote ?? `Return ${formatReturnNumber(ret.number)}`,
+              line.inspectionNote ??
+              `Povraćaj ${formatReturnNumber(ret.number)}`,
             userId,
             returnId: id,
           });
@@ -306,8 +312,12 @@ export class ReturnsService {
           formatReturnNumber(ret.number),
           userId,
         );
-        await this.documents.issue(tx, DocumentType.RETURN_NOTE, id, userId);
       }
+      // The customer hears the outcome either way; an approved return carries its note.
+      const note = accepted.length
+        ? await this.documents.issue(tx, DocumentType.RETURN_NOTE, id, userId)
+        : null;
+      await this.mail.returnEmail(tx, id, note);
     }, LONG_TX);
     return this.findForStaff(id);
   }
@@ -515,19 +525,24 @@ export class ReturnsService {
     returnNumber: string,
     userId: string,
   ) {
-    const [ordered, returned] = await Promise.all([
-      tx.orderItem.aggregate({ where: { orderId }, _sum: { quantity: true } }),
-      tx.returnItem.aggregate({
-        where: {
-          return: {
-            orderId,
-            status: { in: [ReturnStatus.APPROVED, ReturnStatus.REFUNDED] },
+    const [ordered, returned] = await inSequence(
+      () =>
+        tx.orderItem.aggregate({
+          where: { orderId },
+          _sum: { quantity: true },
+        }),
+      () =>
+        tx.returnItem.aggregate({
+          where: {
+            return: {
+              orderId,
+              status: { in: [ReturnStatus.APPROVED, ReturnStatus.REFUNDED] },
+            },
+            decision: { not: ReturnDecision.REJECT },
           },
-          decision: { not: ReturnDecision.REJECT },
-        },
-        _sum: { quantity: true },
-      }),
-    ]);
+          _sum: { quantity: true },
+        }),
+    );
     const all = (returned._sum.quantity ?? 0) >= (ordered._sum.quantity ?? 0);
     await tx.order.update({
       where: { id: orderId },

@@ -47,6 +47,8 @@ function staffSelect(canSeeCost: boolean) {
     stock: { select: { quantity: true, reserved: true } },
     barcode: true,
     trackSerial: true,
+    lowStockThreshold: true,
+    stockAlert: true,
     vatPercent: true,
     isArchived: true,
     createdAt: true,

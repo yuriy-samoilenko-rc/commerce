@@ -101,6 +101,14 @@
     {
       "key": "documentId",
       "value": ""
+    },
+    {
+      "key": "notificationId",
+      "value": ""
+    },
+    {
+      "key": "emailId",
+      "value": ""
     }
   ],
   "item": [
@@ -1786,7 +1794,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"legalName\": \"TechStore d.o.o.\",\n  \"address\": \"Knez Mihailova 1, 11000 Beograd\",\n  \"taxId\": \"109876543\",\n  \"registrationNumber\": \"21543210\",\n  \"bankAccount\": \"160-0000000123456-78\",\n  \"phone\": \"+381 11 123 4567\",\n  \"email\": \"info@techstore.rs\",\n  \"currency\": \"EUR\",\n  \"defaultVatPercent\": 20\n}"
+              "raw": "{\n  \"legalName\": \"TechStore d.o.o.\",\n  \"address\": \"Bulevar Svetog Petra Cetinjskog 1, 81000 Podgorica\",\n  \"taxId\": \"03123456\",\n  \"registrationNumber\": \"50012345\",\n  \"bankAccount\": \"510-0000000012345-67\",\n  \"phone\": \"+382 20 123 456\",\n  \"email\": \"info@techstore.me\",\n  \"currency\": \"EUR\",\n  \"defaultVatPercent\": 21,\n  \"lowStockThreshold\": 2\n}"
             }
           }
         }
@@ -1894,6 +1902,139 @@
           "request": {
             "method": "GET",
             "url": "{{baseUrl}}/documents/{{documentId}}/pdf"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Notifications (bell)",
+      "item": [
+        {
+          "name": "Unread count (badge)",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/notifications/unread-count"
+          }
+        },
+        {
+          "name": "My notifications",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const items = pm.response.json().items;",
+                  "if (items && items.length) pm.collectionVariables.set('notificationId', items[0].id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/notifications?page=1&limit=20"
+          }
+        },
+        {
+          "name": "Only unread",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/notifications?unreadOnly=true"
+          }
+        },
+        {
+          "name": "Mark one as read",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/notifications/{{notificationId}}/read"
+          }
+        },
+        {
+          "name": "Mark all as read",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/notifications/read-all"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Emails (admin)",
+      "item": [
+        {
+          "name": "Send a document to the customer",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/admin/documents/{{documentId}}/send",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            }
+          }
+        },
+        {
+          "name": "Send a document to another address",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/admin/documents/{{documentId}}/send",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"to\": \"racunovodstvo@example.me\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Email queue",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const items = pm.response.json().items;",
+                  "if (items && items.length) pm.collectionVariables.set('emailId', items[0].id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/admin/emails?page=1&limit=20"
+          }
+        },
+        {
+          "name": "Failed emails",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const items = pm.response.json().items;",
+                  "if (items && items.length) pm.collectionVariables.set('emailId', items[0].id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/admin/emails?status=FAILED"
+          }
+        },
+        {
+          "name": "Retry a failed email",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/admin/emails/{{emailId}}/retry"
           }
         }
       ]

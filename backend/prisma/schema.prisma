@@ -53,6 +53,7 @@ model User {
   auditLogs           AuditLog[]
   documentsCreated    Document[]       @relation("DocumentCreatedBy")
   documentsReceived   Document[]       @relation("DocumentCustomer")
+  notifications       Notification[]
 
   @@map("users")
 }
@@ -80,26 +81,30 @@ model Brand {
 }
 
 model Product {
-  id             String   @id @default(uuid())
-  name           String
-  sku            String   @unique
-  barcode        String?  @unique
-  model          String?
-  description    String?
+  id                String          @id @default(uuid())
+  name              String
+  sku               String          @unique
+  barcode           String?         @unique
+  model             String?
+  description       String?
   // Free-form specs that differ per category (screen size for TVs, volume for fridges...)
-  attributes     Json     @default("{}")
+  attributes        Json            @default("{}")
   // true for goods tracked unit by unit (serial number / IMEI), see ТЗ п.4
-  trackSerial    Boolean  @default(false)
-  purchasePrice  Decimal  @db.Decimal(10, 2)
-  sellingPrice   Decimal  @db.Decimal(10, 2)
-  discountPrice  Decimal? @db.Decimal(10, 2)
+  trackSerial       Boolean         @default(false)
+  purchasePrice     Decimal         @db.Decimal(10, 2)
+  sellingPrice      Decimal         @db.Decimal(10, 2)
+  discountPrice     Decimal?        @db.Decimal(10, 2)
   // стандартная ставка ПДВ в Черногории
-  vatPercent     Decimal  @default(21) @db.Decimal(5, 2)
-  weightKg       Decimal? @db.Decimal(10, 3)
-  warrantyMonths Int?
-  isArchived     Boolean  @default(false)
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  vatPercent        Decimal         @default(21) @db.Decimal(5, 2)
+  weightKg          Decimal?        @db.Decimal(10, 3)
+  warrantyMonths    Int?
+  // порог "мало товара"; null — общий порог из настроек компании
+  lowStockThreshold Int?
+  // последний уровень, о котором уже уведомили: повторно уведомляем только при ухудшении
+  stockAlert        StockAlertLevel @default(OK)
+  isArchived        Boolean         @default(false)
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
 
   categoryId String
   category   Category @relation(fields: [categoryId], references: [id])
@@ -861,6 +866,8 @@ model CompanySettings {
   currency           String   @default("EUR")
   // НДС для доставки и прочих строк без товара
   defaultVatPercent  Decimal  @default(21) @db.Decimal(5, 2)
+  // "мало товара", если доступно на активных складах не больше этого числа
+  lowStockThreshold  Int      @default(2)
   updatedAt          DateTime @updatedAt
 
   @@map("company_settings")
@@ -950,4 +957,75 @@ model Document {
   @@index([supplierId])
   @@index([customerId])
   @@map("documents")
+}
+
+// --- Уведомления и письма (п.20 ТЗ) ---
+
+enum StockAlertLevel {
+  OK
+  LOW
+  OUT
+}
+
+enum NotificationType {
+  ORDER_NEW
+  ORDER_PAID
+  ORDER_TO_PICK
+  ORDER_READY_TO_SHIP
+  RECEIVING_CONFIRMED
+  RETURN_REQUESTED
+  STOCK_LOW
+  STOCK_OUT
+  WARRANTY_EXPIRING
+}
+
+// Уведомление сотруднику (колокольчик). entityType + entityId — куда ведёт клик.
+model Notification {
+  id         String           @id @default(uuid())
+  type       NotificationType
+  title      String
+  body       String?
+  entityType String?
+  entityId   String?
+  // защита от повторов: одно и то же событие не уведомляется дважды одному человеку
+  dedupeKey  String?
+  createdAt  DateTime         @default(now())
+  readAt     DateTime?
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+
+  @@unique([userId, dedupeKey])
+  @@index([userId, readAt, createdAt])
+  @@map("notifications")
+}
+
+enum EmailStatus {
+  PENDING
+  SENT
+  FAILED
+}
+
+// Очередь писем (transactional outbox): письмо записывается в той же транзакции, что и
+// событие, а отправляет его фоновый обработчик с повторами при ошибках.
+model EmailOutbox {
+  id          String      @id @default(uuid())
+  to          String
+  subject     String
+  text        String
+  html        String?
+  // документы, которые прикладываются к письму как PDF
+  documentIds String[]
+  status      EmailStatus @default(PENDING)
+  attempts    Int         @default(0)
+  lastError   String?
+  sendAfter   DateTime    @default(now())
+  sentAt      DateTime?
+  createdAt   DateTime    @default(now())
+
+  orderId String?
+
+  @@index([status, sendAfter])
+  @@index([orderId])
+  @@map("email_outbox")
 }

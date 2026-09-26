@@ -15,6 +15,8 @@ import {
   SerialUnitStatus,
 } from '../generated/prisma/client';
 import { DocumentsService } from '../documents/documents.service';
+import { MailService } from '../mail/mail.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { StockLedgerService, Tx } from '../stock/stock-ledger.service';
 import { PickDto, ShipDto } from './dto/fulfillment.dto';
@@ -27,6 +29,8 @@ export class FulfillmentService {
     private readonly prisma: PrismaService,
     private readonly ledger: StockLedgerService,
     private readonly documents: DocumentsService,
+    private readonly notifications: NotificationsService,
+    private readonly mail: MailService,
     private readonly orders: OrdersService,
   ) {}
 
@@ -50,6 +54,7 @@ export class FulfillmentService {
         'picked',
       );
       await this.event(tx, id, OrderEventType.PICKING_STARTED, userId);
+      await this.notifications.orderEvent(tx, 'ORDER_TO_PICK', id);
     });
     return this.orders.findForStaff(id);
   }
@@ -181,6 +186,7 @@ export class FulfillmentService {
         throw new ConflictException(`Not everything is picked: ${list}`);
       }
       await this.event(tx, id, OrderEventType.PICKING_COMPLETED, userId);
+      await this.notifications.orderEvent(tx, 'ORDER_READY_TO_SHIP', id);
     });
     return this.orders.findForStaff(id);
   }
@@ -216,8 +222,22 @@ export class FulfillmentService {
         'shipped',
       );
       await this.ledger.shipOrder(tx, id, userId, now);
-      await this.documents.issue(tx, DocumentType.DELIVERY_NOTE, id, userId);
-      await this.documents.issue(tx, DocumentType.WARRANTY_CARD, id, userId);
+      const deliveryNote = await this.documents.issue(
+        tx,
+        DocumentType.DELIVERY_NOTE,
+        id,
+        userId,
+      );
+      const warrantyCard = await this.documents.issue(
+        tx,
+        DocumentType.WARRANTY_CARD,
+        id,
+        userId,
+      );
+      await this.mail.orderEmail(tx, 'SHIPPED', id, [
+        deliveryNote,
+        warrantyCard,
+      ]);
 
       const note =
         [dto.carrier, dto.trackingNumber].filter(Boolean).join(' ') || null;
@@ -228,7 +248,7 @@ export class FulfillmentService {
           id,
           OrderEventType.DELIVERED,
           userId,
-          'Picked up at the store',
+          'Preuzeto u prodavnici',
         );
     }, LONG_TX);
     return this.orders.findForStaff(id);
