@@ -62,7 +62,7 @@ const DECISION: Record<ReturnDecision, string> = {
 const compact = (lines: (string | null | undefined | false)[]) =>
   lines.filter((l): l is string => !!l);
 
-function companyBlock(c: CompanySettings): DocumentData['company'] {
+export function companyBlock(c: CompanySettings): DocumentData['company'] {
   return {
     name: c.legalName || c.name,
     lines: compact([

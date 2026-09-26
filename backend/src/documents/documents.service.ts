@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import { localYear } from '../common/timezone';
 import { Type } from 'class-transformer';
 import {
   IsDate,
@@ -105,7 +106,8 @@ export class DocumentsService {
     if (!built) return null;
 
     const issuedAt = new Date();
-    const year = issuedAt.getUTCFullYear();
+    // Local year: an invoice issued on 1 January at 00:30 belongs to the new year.
+    const year = localYear(issuedAt);
     // The counter row stays locked until commit: numbers are sequential with no gaps,
     // which accountants expect from invoices.
     const [{ last }] = await tx.$queryRaw<{ last: number }[]>`

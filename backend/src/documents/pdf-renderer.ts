@@ -23,6 +23,8 @@ export interface RenderInput {
   issuedAt: Date;
   cancelled: boolean;
   data: DocumentData;
+  /** Wide tables (reports) are printed across the page. */
+  landscape?: boolean;
 }
 
 export function renderPdf({
@@ -30,9 +32,11 @@ export function renderPdf({
   issuedAt,
   cancelled,
   data,
+  landscape = false,
 }: RenderInput): Promise<Buffer> {
   const doc = new PDFDocument({
     size: 'A4',
+    layout: landscape ? 'landscape' : 'portrait',
     margin: MARGIN,
     bufferPages: true,
     info: { Title: `${data.title} ${number}`, Author: data.company.name },
@@ -96,7 +100,14 @@ export function renderPdf({
   // --- parties and document details side by side
   const blocks = [
     ...data.parties,
-    { label: 'Podaci', lines: data.meta.map((m) => `${m.label}: ${m.value}`) },
+    ...(data.meta.length
+      ? [
+          {
+            label: 'Podaci',
+            lines: data.meta.map((m) => `${m.label}: ${m.value}`),
+          },
+        ]
+      : []),
   ];
   const blockW = width / Math.max(blocks.length, 3);
   const blocksTop = doc.y + 8;
@@ -114,7 +125,7 @@ export function renderPdf({
     blocksBottom = Math.max(blocksBottom, doc.y);
   });
   doc.x = MARGIN;
-  doc.y = blocksBottom + 14;
+  doc.y = blocks.length ? blocksBottom + 14 : doc.y + 10;
 
   // --- items table
   const totalWeight = data.columns.reduce((s, c) => s + c.width, 0);

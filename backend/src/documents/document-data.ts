@@ -1,3 +1,4 @@
+import { localParts } from '../common/timezone';
 import { DocumentType, Prisma } from '../generated/prisma/client';
 
 export interface DocColumn {
@@ -45,9 +46,9 @@ export const money = (value: Prisma.Decimal | number | string) => {
   return `${sign}${digits},${frac}`;
 };
 
-/** Montenegrin notation: 26.09.2026. */
+/** Montenegrin notation in local time: 26.09.2026. */
 export const day = (d: Date | null | undefined) => {
   if (!d) return '—';
-  const [y, m, dd] = d.toISOString().slice(0, 10).split('-');
-  return `${dd}.${m}.${y}.`;
+  const { year, month, day: dd } = localParts(d);
+  return `${dd}.${month}.${year}.`;
 };

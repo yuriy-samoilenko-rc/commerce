@@ -595,13 +595,15 @@ model Order {
 
 // Название, SKU, цена и НДС фиксируются на момент заказа.
 model OrderItem {
-  id          String  @id @default(uuid())
+  id          String   @id @default(uuid())
   productName String
   sku         String
   quantity    Int
-  unitPrice   Decimal @db.Decimal(10, 2)
-  vatPercent  Decimal @db.Decimal(5, 2)
-  lineTotal   Decimal @db.Decimal(12, 2)
+  unitPrice   Decimal  @db.Decimal(10, 2)
+  vatPercent  Decimal  @db.Decimal(5, 2)
+  lineTotal   Decimal  @db.Decimal(12, 2)
+  // себестоимость единицы на момент отгрузки (для прибыли); null — ещё не отгружено
+  unitCost    Decimal? @db.Decimal(10, 2)
 
   orderId String
   order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)

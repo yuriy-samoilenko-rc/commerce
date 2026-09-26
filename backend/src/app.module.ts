@@ -13,6 +13,7 @@ import { OrdersModule } from './orders/orders.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { ProductsModule } from './products/products.module';
 import { ReceivingsModule } from './receivings/receivings.module';
+import { ReportsModule } from './reports/reports.module';
 import { ReturnsModule } from './returns/returns.module';
 import { SettingsModule } from './settings/settings.module';
 import { StockModule } from './stock/stock.module';
@@ -30,6 +31,7 @@ import { WarrantyModule } from './warranty/warranty.module';
     DocumentsModule,
     NotificationsModule,
     MailModule,
+    ReportsModule,
     UsersModule,
     AuthModule,
     CategoriesModule,

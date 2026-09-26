@@ -222,6 +222,11 @@ export class FulfillmentService {
         'shipped',
       );
       await this.ledger.shipOrder(tx, id, userId, now);
+      // Freeze the cost of what was sold: later purchase price changes must not rewrite past profit.
+      await tx.$executeRaw`
+        UPDATE "order_items" oi SET "unitCost" = p."purchasePrice"
+        FROM "products" p
+        WHERE p."id" = oi."productId" AND oi."orderId" = ${id}`;
       const deliveryNote = await this.documents.issue(
         tx,
         DocumentType.DELIVERY_NOTE,

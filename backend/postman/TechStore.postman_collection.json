@@ -2038,6 +2038,109 @@
           }
         }
       ]
+    },
+    {
+      "name": "Dashboard & reports",
+      "item": [
+        {
+          "name": "Dashboard",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/admin/dashboard"
+          }
+        },
+        {
+          "name": "Sales by day (last 30 days)",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/admin/reports/sales?groupBy=day"
+          }
+        },
+        {
+          "name": "Sales by month, this year",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/admin/reports/sales?groupBy=month&from=2026-01-01&to=2026-12-31"
+          }
+        },
+        {
+          "name": "Sales by product (profit, margin)",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/admin/reports/sales?groupBy=product&from=2026-09-01&to=2026-09-30"
+          }
+        },
+        {
+          "name": "Sales by category",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/admin/reports/sales?groupBy=category"
+          }
+        },
+        {
+          "name": "Sales by employee",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/admin/reports/sales?groupBy=employee"
+          }
+        },
+        {
+          "name": "Sales by product → Excel",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/admin/reports/sales?groupBy=product&format=xlsx"
+          }
+        },
+        {
+          "name": "Sales by day → CSV",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/admin/reports/sales?groupBy=day&format=csv"
+          }
+        },
+        {
+          "name": "Customers",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/admin/reports/customers"
+          }
+        },
+        {
+          "name": "Suppliers",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/admin/reports/suppliers?from=2026-01-01&to=2026-12-31"
+          }
+        },
+        {
+          "name": "Stock value (all warehouses)",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/admin/reports/stock"
+          }
+        },
+        {
+          "name": "Low stock only → PDF",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/admin/reports/stock?onlyLow=true&format=pdf"
+          }
+        },
+        {
+          "name": "Stock of one warehouse",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/admin/reports/stock?warehouseId={{warehouseId}}"
+          }
+        },
+        {
+          "name": "Stock movements by kind",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/admin/reports/movements?warehouseId={{warehouseId}}"
+          }
+        }
+      ]
     }
   ]
 }
