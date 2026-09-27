@@ -21,6 +21,7 @@ import type { TransfersService } from "@backend/transfers/transfers.service";
 import type { InventoryService } from "@backend/inventory/inventory.service";
 import type { ReturnsService } from "@backend/returns/returns.service";
 import type { WarrantyService } from "@backend/warranty/warranty.service";
+import type { FulfillmentService } from "@backend/orders/fulfillment.service";
 
 export type Json<T> = T extends { toJSON(): infer R }
   ? R
@@ -66,3 +67,6 @@ export type ReturnDetail = Returns<ReturnsService["findForStaff"]>;
 export type WarrantyList = Returns<WarrantyService["list"]>;
 export type WarrantyCase = Returns<WarrantyService["findOne"]>;
 export type SerialInfo = Returns<StockService["findSerial"]>;
+export type PickingTasks = Returns<FulfillmentService["pickingTasks"]>;
+export type PickSheet = Returns<FulfillmentService["pickSheet"]>;
+export type ProductByCode = Returns<ProductsService["findByCode"]>;

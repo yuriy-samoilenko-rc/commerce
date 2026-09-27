@@ -118,7 +118,7 @@ export function CountWorkspace({ count }: { count: Count }) {
           )}
           <p className="text-xs text-muted-foreground">
             „Komada“ važi za robu bez serijskog broja: npr. 12 kablova jednim skeniranjem. Robu sa serijskim brojem
-            skenirajte komad po komad.
+            skenirajte komad po komad; komad čiji serijski broj sistem ne poznaje unesite preko „Ispravi“ na stavci.
           </p>
         </CardContent>
       </Card>

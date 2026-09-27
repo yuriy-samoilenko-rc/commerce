@@ -314,25 +314,38 @@ export class StockLedgerService {
         orderItemId: true,
       },
     });
+    const params = { serial: serialNumber };
     if (!unit)
-      throw new BadRequestException(`Serial ${serialNumber} is not registered`);
+      throw badRequest(
+        'SERIAL_NOT_FOUND',
+        `Serial ${serialNumber} is not registered`,
+        params,
+      );
     if (unit.productId !== productId) {
-      throw new BadRequestException(
+      throw badRequest(
+        'SERIAL_OTHER_PRODUCT',
         `Serial ${serialNumber} belongs to another product`,
+        params,
       );
     }
     if (unit.orderItemId === orderItemId) {
-      throw new ConflictException(
+      throw conflict(
+        'SERIAL_ALREADY_PICKED',
         `Serial ${serialNumber} is already picked for this order`,
+        params,
       );
     }
     if (unit.orderItemId && unit.status === SerialUnitStatus.IN_STOCK) {
-      throw new ConflictException(
+      throw conflict(
+        'SERIAL_PICKED_ELSEWHERE',
         `Serial ${serialNumber} is already picked for another order`,
+        params,
       );
     }
-    throw new ConflictException(
+    throw conflict(
+      'SERIAL_ELSEWHERE',
       `Serial ${serialNumber} is not on the shelf of this warehouse (${unit.status})`,
+      { ...params, status: unit.status },
     );
   }
 
@@ -342,8 +355,10 @@ export class StockLedgerService {
       data: { orderItemId: null },
     });
     if (!count)
-      throw new BadRequestException(
+      throw badRequest(
+        'SERIAL_NOT_PICKED',
         `Serial ${serialNumber} is not picked for this order`,
+        { serial: serialNumber },
       );
   }
 

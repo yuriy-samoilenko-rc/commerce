@@ -48,9 +48,8 @@ const CODED: Record<string, (p: Params) => string> = {
   COUNT_ALREADY_OPEN: (p) => `Za ovo skladište je već otvoren popis ${p.count}.`,
   COUNT_WRONG_STATE: (p) =>
     `Radnja nije moguća: popis je sada „${COUNT_STATUS[p.status] ?? p.status}“. Osvježite stranicu.`,
-  UNKNOWN_CODE: (p) =>
-    `Nepoznat kod „${p.code}“. Serijski broj koji nije u sistemu unesite ručno na stavci proizvoda.`,
-  SCAN_SERIAL_NOT_BARCODE: (p) => `„${p.product}“ se broji po serijskim brojevima: skenirajte serijski broj, ne bar-kod.`,
+  UNKNOWN_CODE: (p) => `Nepoznat kod „${p.code}“: nije bar-kod, šifra ni serijski broj iz sistema.`,
+  SCAN_SERIAL_NOT_BARCODE: (p) => `„${p.product}“ se vodi po serijskim brojevima: skenirajte serijski broj, ne bar-kod.`,
   SERIAL_IS_ONE_UNIT: () => "Serijski broj je uvijek jedan komad.",
   SERIAL_OTHER_PRODUCT: (p) => `Serijski broj ${p.serial} pripada drugom proizvodu.`,
   SERIAL_ALREADY_COUNTED: (p) => `Serijski broj ${p.serial} je već izbrojan.`,
@@ -75,6 +74,13 @@ const CODED: Record<string, (p: Params) => string> = {
   WARRANTY_WRONG_STATE: (p) =>
     `Radnja nije moguća: zahtjev je sada „${WARRANTY_STATUS[p.status] ?? p.status}“. Osvježite stranicu.`,
   UNIT_STATE_CHANGED: () => "Status uređaja se u međuvremenu promijenio. Osvježite stranicu.",
+  NOT_IN_PICK_LIST: () => "Ovaj proizvod se za ovu narudžbu ne uzima sa ovog skladišta.",
+  PICK_LIMIT: (p) => `„${p.product}“: ostalo je još samo ${p.left} kom. za sklapanje.`,
+  UNPICK_LIMIT: (p) => `„${p.product}“: spakovano je samo ${p.picked} kom.`,
+  PICKING_INCOMPLETE: (p) => `Nije sve spakovano: ${p.list}.`,
+  SERIAL_ALREADY_PICKED: (p) => `Serijski broj ${p.serial} je već spakovan za ovu narudžbu.`,
+  SERIAL_PICKED_ELSEWHERE: (p) => `Serijski broj ${p.serial} je već spakovan za drugu narudžbu.`,
+  SERIAL_NOT_PICKED: (p) => `Serijski broj ${p.serial} nije spakovan za ovu narudžbu.`,
   REPLACEMENT_UNAVAILABLE: (p) =>
     `Serijski broj ${p.serial} nije slobodan komad proizvoda „${p.product}“ na polici izabranog skladišta.`,
 };

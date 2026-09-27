@@ -1,10 +1,5 @@
-import {
-  BadRequestException,
-  ConflictException,
-  Injectable,
-  NotFoundException,
-} from '@nestjs/common';
-import { conflict } from '../common/errors';
+import { Injectable, NotFoundException } from '@nestjs/common';
+import { badRequest, conflict, notFound } from '../common/errors';
 import { LONG_TX } from '../common/transactions';
 import {
   DeliveryMethod,
@@ -99,7 +94,8 @@ export class FulfillmentService {
             select: { id: true },
           })
         )?.id;
-      if (!productId) throw new NotFoundException(`Unknown code "${code}"`);
+      if (!productId)
+        throw notFound('UNKNOWN_CODE', `Unknown code "${code}"`, { code });
 
       const res = await tx.stockReservation.findFirst({
         where: {
@@ -116,18 +112,22 @@ export class FulfillmentService {
         },
       });
       if (!res) {
-        throw new BadRequestException(
+        throw badRequest(
+          'NOT_IN_PICK_LIST',
           'This product is not to be picked from this warehouse for this order',
         );
       }
       const { name, trackSerial } = res.product;
       if (trackSerial && !unit) {
-        throw new BadRequestException(
+        throw badRequest(
+          'SCAN_SERIAL_NOT_BARCODE',
           `"${name}" is picked by serial number: scan the serial, not the barcode`,
+          { product: name },
         );
       }
       if (trackSerial && qty !== 1)
-        throw new BadRequestException(
+        throw badRequest(
+          'SERIAL_IS_ONE_UNIT',
           'A serial number is always exactly one unit',
         );
 
@@ -140,11 +140,17 @@ export class FulfillmentService {
         data: { pickedQuantity: { increment: direction * qty } },
       });
       if (!count) {
-        throw new ConflictException(
-          direction > 0
-            ? `"${name}": only ${res.quantity - res.pickedQuantity} left to pick`
-            : `"${name}": only ${res.pickedQuantity} picked`,
-        );
+        throw direction > 0
+          ? conflict(
+              'PICK_LIMIT',
+              `"${name}": only ${res.quantity - res.pickedQuantity} left to pick`,
+              { product: name, left: res.quantity - res.pickedQuantity },
+            )
+          : conflict(
+              'UNPICK_LIMIT',
+              `"${name}": only ${res.pickedQuantity} picked`,
+              { product: name, picked: res.pickedQuantity },
+            );
       }
 
       if (trackSerial) {
@@ -187,7 +193,13 @@ export class FulfillmentService {
         const list = unfinished
           .map((r) => `"${r.product.name}" ${r.pickedQuantity}/${r.quantity}`)
           .join(', ');
-        throw new ConflictException(`Not everything is picked: ${list}`);
+        throw conflict(
+          'PICKING_INCOMPLETE',
+          `Not everything is picked: ${list}`,
+          {
+            list,
+          },
+        );
       }
       await this.event(tx, id, OrderEventType.PICKING_COMPLETED, userId);
       await this.notifications.orderEvent(tx, 'ORDER_READY_TO_SHIP', id);
@@ -251,14 +263,17 @@ export class FulfillmentService {
 
       const note =
         [dto.carrier, dto.trackingNumber].filter(Boolean).join(' ') || null;
-      await this.event(tx, id, OrderEventType.SHIPPED, userId, note);
+      await this.event(tx, id, OrderEventType.SHIPPED, userId, note, now);
       if (pickup)
+        // History is ordered by time; one millisecond later keeps "delivered" after
+        // "shipped" even though both happen in the same instant.
         await this.event(
           tx,
           id,
           OrderEventType.DELIVERED,
           userId,
           'Preuzeto u prodavnici',
+          new Date(now.getTime() + 1),
         );
     }, LONG_TX);
     return this.orders.findForStaff(id);
@@ -433,7 +448,10 @@ export class FulfillmentService {
     type: OrderEventType,
     userId: string,
     note: string | null = null,
+    createdAt?: Date,
   ) {
-    return tx.orderEvent.create({ data: { orderId, type, userId, note } });
+    return tx.orderEvent.create({
+      data: { orderId, type, userId, note, createdAt },
+    });
   }
 }

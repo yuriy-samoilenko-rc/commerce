@@ -96,7 +96,7 @@ test.describe("stock counts", () => {
     await expect(result(page)).toHaveText(`Serijski broj CNT-${s.run}-A je već izbrojan.`);
     await scan(page, s.product.sku);
     await expect(result(page)).toHaveText(
-      `„${s.product.name}“ se broji po serijskim brojevima: skenirajte serijski broj, ne bar-kod.`,
+      `„${s.product.name}“ se vodi po serijskim brojevima: skenirajte serijski broj, ne bar-kod.`,
     );
     await scan(page, `NEPOZNAT-${s.run}`);
     await expect(result(page)).toContainText(`Nepoznat kod „NEPOZNAT-${s.run}“`);

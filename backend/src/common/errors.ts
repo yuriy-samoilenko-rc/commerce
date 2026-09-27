@@ -53,6 +53,13 @@ export type ErrorCode =
   | 'WARRANTY_WRONG_STATE'
   | 'UNIT_STATE_CHANGED'
   | 'REPLACEMENT_UNAVAILABLE'
+  | 'NOT_IN_PICK_LIST'
+  | 'PICK_LIMIT'
+  | 'UNPICK_LIMIT'
+  | 'PICKING_INCOMPLETE'
+  | 'SERIAL_ALREADY_PICKED'
+  | 'SERIAL_PICKED_ELSEWHERE'
+  | 'SERIAL_NOT_PICKED'
   | 'DOCUMENT_EMPTY';
 
 export type ErrorParams = Record<string, string | number>;

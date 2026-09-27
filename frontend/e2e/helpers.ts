@@ -57,7 +57,7 @@ export async function seedProduct(stock = 5) {
     sellingPrice: 49.9,
     categoryId: category.id,
   });
-  const warehouse = await post<{ id: string }>("/warehouses", { name: `E2E skladište ${run}` });
+  const warehouse = await post<{ id: string; name: string }>("/warehouses", { name: `E2E skladište ${run}` });
   const supplier = await post<{ id: string }>("/suppliers", { name: `E2E dobavljač ${run}` });
   const receiving = await post<{ id: string }>("/receivings", {
     supplierId: supplier.id,
@@ -123,6 +123,35 @@ export async function sellSerialUnit() {
   await post(`/admin/orders/${order.id}/complete-picking`);
   await post(`/admin/orders/${order.id}/ship`);
   return { ...s, order, sold, spare };
+}
+
+/** A seeded order that the warehouse is picking right now (confirmed, paid, sent to picking). */
+export async function orderInPicking() {
+  const o = await seedOrder();
+  const post = (path: string) => backend(path, { method: "POST", token: o.token, json: {} });
+  await post(`/admin/orders/${o.id}/confirm`);
+  await post(`/admin/orders/${o.id}/mark-paid`);
+  await post(`/admin/orders/${o.id}/start-picking`);
+  return o;
+}
+
+/** A serial-tracked unit on the shelf and an order picking it (not yet scanned). */
+export async function serialOrderInPicking() {
+  const s = await seedReceivingSetup({ trackSerial: true, warrantyMonths: 12 });
+  const serial = `P-${s.run}-1`;
+  await receiveStock(s, 1, [serial]);
+  const token = await adminToken();
+  const post = <T>(path: string, json: unknown = {}) => backend<T>(path, { method: "POST", token, json });
+  const order = await post<{ id: string; number: number }>("/admin/orders", {
+    items: [{ productId: s.product.id, quantity: 1 }],
+    customerName: `Sklapanje ${s.run}`,
+    customerPhone: "+382 67 555 111",
+    deliveryMethod: "PICKUP",
+    paymentMethod: "CASH_ON_DELIVERY",
+  });
+  await post(`/admin/orders/${order.id}/confirm`);
+  await post(`/admin/orders/${order.id}/start-picking`);
+  return { ...s, order, serial };
 }
 
 /** One more (empty) warehouse. */

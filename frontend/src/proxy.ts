@@ -11,5 +11,6 @@ export function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/admin/:path*"],
+  // /m and /m/... (the warehouse phone app), not the manifest or icons next to it.
+  matcher: ["/admin/:path*", "/m", "/m/:path*"],
 };

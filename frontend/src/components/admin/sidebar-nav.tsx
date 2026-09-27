@@ -1,6 +1,6 @@
 "use client";
 
-import { ClipboardCheck, LayoutDashboard, RotateCcw, ShieldCheck, Package, PackagePlus, ShoppingCart, Truck, Warehouse, type LucideIcon } from "lucide-react";
+import { ClipboardCheck, LayoutDashboard, RotateCcw, ShieldCheck, Smartphone, Package, PackagePlus, ShoppingCart, Truck, Warehouse, type LucideIcon } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { Role } from "@/lib/backend-types";
@@ -25,6 +25,8 @@ const NAV: NavItem[] = [
   { href: "/admin/prijem", label: "Prijem robe", icon: PackagePlus },
   { href: "/admin/prenos", label: "Prenos robe", icon: Truck },
   { href: "/admin/popis", label: "Popis", icon: ClipboardCheck },
+  // The phone app for scanning; admins, managers and storekeepers work in the warehouse.
+  { href: "/m", label: "Mobilno skladište", icon: Smartphone, roles: ["ADMIN", "MANAGER", "WAREHOUSE"] },
 ];
 
 export function SidebarNav({ role, onNavigate }: { role: Role; onNavigate?: () => void }) {
