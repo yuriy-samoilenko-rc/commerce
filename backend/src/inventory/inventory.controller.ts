@@ -48,6 +48,15 @@ export class InventoryController {
     return this.inventory.scan(id, dto);
   }
 
+  /** One product's line: expected, counted and the serial numbers counted so far. */
+  @Get(':id/lines/:productId')
+  line(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('productId', ParseUUIDPipe) productId: string,
+  ) {
+    return this.inventory.line(id, productId);
+  }
+
   @Roles(...COUNTERS)
   @Put(':id/lines/:productId')
   setLine(

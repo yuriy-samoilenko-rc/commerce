@@ -80,6 +80,13 @@ export const TRANSFER_STATUS: Record<string, string> = {
   CANCELLED: "Otkazan",
 };
 
+export const COUNT_STATUS: Record<string, string> = {
+  IN_PROGRESS: "Brojanje u toku",
+  COUNTED: "Izbrojano",
+  APPROVED: "Odobren",
+  CANCELLED: "Otkazan",
+};
+
 export const SERIAL_STATUS: Record<string, string> = {
   IN_STOCK: "Na stanju",
   IN_TRANSIT: "U prenosu",

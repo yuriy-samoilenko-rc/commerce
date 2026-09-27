@@ -18,6 +18,7 @@ import type { SuppliersService } from "@backend/suppliers/suppliers.service";
 import type { ReceivingsService } from "@backend/receivings/receivings.service";
 import type { DocumentsService } from "@backend/documents/documents.service";
 import type { TransfersService } from "@backend/transfers/transfers.service";
+import type { InventoryService } from "@backend/inventory/inventory.service";
 
 export type Json<T> = T extends { toJSON(): infer R }
   ? R
@@ -55,3 +56,6 @@ export type Receiving = Returns<ReceivingsService["findOne"]>;
 export type DocumentList = Returns<DocumentsService["list"]>;
 export type TransferList = Returns<TransfersService["list"]>;
 export type Transfer = Returns<TransfersService["findOne"]>;
+export type CountList = Returns<InventoryService["list"]>;
+export type Count = Returns<InventoryService["findOne"]>;
+export type CountLineView = Returns<InventoryService["scan"]>;

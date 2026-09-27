@@ -1,4 +1,4 @@
-import { ORDER_STATUS, PAYMENT_STATUS, TRANSFER_STATUS } from "./labels";
+import { COUNT_STATUS, ORDER_STATUS, PAYMENT_STATUS, SERIAL_STATUS, TRANSFER_STATUS } from "./labels";
 
 /**
  * Browser-side API calls. They go to our own /api/backend proxy (same origin),
@@ -44,6 +44,18 @@ const CODED: Record<string, (p: Params) => string> = {
   TRANSFER_WRONG_STATE: (p) =>
     `Radnja nije moguća: prenos je sada „${TRANSFER_STATUS[p.status] ?? p.status}“. Osvježite stranicu.`,
   SAME_WAREHOUSE: () => "Skladište iz kojeg i u koje se roba prenosi mora biti različito.",
+  COUNT_ALREADY_OPEN: (p) => `Za ovo skladište je već otvoren popis ${p.count}.`,
+  COUNT_WRONG_STATE: (p) =>
+    `Radnja nije moguća: popis je sada „${COUNT_STATUS[p.status] ?? p.status}“. Osvježite stranicu.`,
+  UNKNOWN_CODE: (p) =>
+    `Nepoznat kod „${p.code}“. Serijski broj koji nije u sistemu unesite ručno na stavci proizvoda.`,
+  SCAN_SERIAL_NOT_BARCODE: (p) => `„${p.product}“ se broji po serijskim brojevima: skenirajte serijski broj, ne bar-kod.`,
+  SERIAL_IS_ONE_UNIT: () => "Serijski broj je uvijek jedan komad.",
+  SERIAL_OTHER_PRODUCT: (p) => `Serijski broj ${p.serial} pripada drugom proizvodu.`,
+  SERIAL_ALREADY_COUNTED: (p) => `Serijski broj ${p.serial} je već izbrojan.`,
+  SERIAL_ELSEWHERE: (p) =>
+    `Serijski broj ${p.serial} nije na polici ovog skladišta (${SERIAL_STATUS[p.status] ?? p.status}). Riješite to prije brojanja, npr. prenosom.`,
+  OUT_OF_COUNT_SCOPE: (p) => `„${p.product}“ nije u kategoriji koja se broji.`,
 };
 
 const FALLBACK: Record<number, string> = {

@@ -3,6 +3,7 @@ import {
   ConflictException,
   HttpException,
   HttpStatus,
+  NotFoundException,
 } from '@nestjs/common';
 
 /**
@@ -29,6 +30,15 @@ export type ErrorCode =
   | 'NOT_DRAFT'
   | 'TRANSFER_WRONG_STATE'
   | 'SAME_WAREHOUSE'
+  | 'COUNT_ALREADY_OPEN'
+  | 'COUNT_WRONG_STATE'
+  | 'UNKNOWN_CODE'
+  | 'SCAN_SERIAL_NOT_BARCODE'
+  | 'SERIAL_IS_ONE_UNIT'
+  | 'SERIAL_OTHER_PRODUCT'
+  | 'SERIAL_ALREADY_COUNTED'
+  | 'SERIAL_ELSEWHERE'
+  | 'OUT_OF_COUNT_SCOPE'
   | 'DOCUMENT_EMPTY';
 
 export type ErrorParams = Record<string, string | number>;
@@ -60,3 +70,10 @@ export const badRequest = (
   params?: ErrorParams,
 ): BadRequestException =>
   coded(HttpStatus.BAD_REQUEST, 'Bad Request', code, message, params);
+
+export const notFound = (
+  code: ErrorCode,
+  message: string,
+  params?: ErrorParams,
+): NotFoundException =>
+  coded(HttpStatus.NOT_FOUND, 'Not Found', code, message, params);

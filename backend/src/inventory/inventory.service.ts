@@ -1,12 +1,12 @@
 import {
   BadRequestException,
-  ConflictException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
 import { CategoriesService } from '../categories/categories.service';
 import { formatCountNumber } from '../common/document-numbers';
 import { pageArgs } from '../common/dto/pagination-query.dto';
+import { badRequest, conflict, notFound } from '../common/errors';
 import { LONG_TX, inSequence } from '../common/transactions';
 import {
   DocumentType,
@@ -90,8 +90,11 @@ export class InventoryService {
       select: { number: true },
     });
     if (open) {
-      throw new ConflictException(
-        `Warehouse already has an open count ${formatCountNumber(open.number)}`,
+      const number = formatCountNumber(open.number);
+      throw conflict(
+        'COUNT_ALREADY_OPEN',
+        `Warehouse already has an open count ${number}`,
+        { count: number },
       );
     }
     // The partial unique index still guards the race between this check and the insert.
@@ -169,7 +172,8 @@ export class InventoryService {
       });
       if (unit) {
         if (dto.quantity && dto.quantity !== 1) {
-          throw new BadRequestException(
+          throw badRequest(
+            'SERIAL_IS_ONE_UNIT',
             'A serial number is always exactly one unit',
           );
         }
@@ -184,13 +188,17 @@ export class InventoryService {
         select: { id: true, name: true, trackSerial: true, categoryId: true },
       });
       if (!product) {
-        throw new NotFoundException(
+        throw notFound(
+          'UNKNOWN_CODE',
           `Unknown code "${code}". For a unit whose serial number is not in the system, enter it manually on the product line`,
+          { code },
         );
       }
       if (product.trackSerial) {
-        throw new BadRequestException(
+        throw badRequest(
+          'SCAN_SERIAL_NOT_BARCODE',
           `"${product.name}" is counted by serial number: scan the serial, not the barcode`,
+          { product: product.name },
         );
       }
       this.assertInScope(count, product);
@@ -225,8 +233,10 @@ export class InventoryService {
 
       if (!product.trackSerial) {
         if (dto.serialNumbers || dto.countedQuantity === undefined) {
-          throw new BadRequestException(
+          throw badRequest(
+            'SERIALS_NOT_TRACKED',
             `"${product.name}" is counted by quantity: send countedQuantity`,
+            { product: product.name },
           );
         }
         await tx.inventoryLine.upsert({
@@ -249,8 +259,11 @@ export class InventoryService {
       const serials = cleanSerials(dto.serialNumbers);
       const duplicates = serials.filter((s, i) => serials.indexOf(s) !== i);
       if (duplicates.length) {
-        throw new BadRequestException(
-          `Duplicate serial numbers: ${[...new Set(duplicates)].join(', ')}`,
+        const list = [...new Set(duplicates)].join(', ');
+        throw badRequest(
+          'SERIALS_DUPLICATE',
+          `Duplicate serial numbers: ${list}`,
+          { serials: list },
         );
       }
       // Known serials must belong to this product and sit on this warehouse's shelf;
@@ -266,8 +279,10 @@ export class InventoryService {
       });
       for (const unit of known) {
         if (unit.productId !== productId) {
-          throw new ConflictException(
+          throw conflict(
+            'SERIAL_OTHER_PRODUCT',
             `Serial ${unit.serialNumber} belongs to another product`,
+            { serial: unit.serialNumber },
           );
         }
         this.assertUnitHere(count, unit.serialNumber, unit);
@@ -289,6 +304,20 @@ export class InventoryService {
         update: { countedQuantity: serials.length },
       });
     });
+    return this.lineView(id, productId);
+  }
+
+  async line(id: string, productId: string) {
+    const exists = await this.prisma.inventoryCount.findUnique({
+      where: { id },
+      select: { id: true },
+    });
+    if (!exists) throw new NotFoundException('Inventory count not found');
+    const product = await this.prisma.product.findUnique({
+      where: { id: productId },
+      select: { id: true },
+    });
+    if (!product) throw new NotFoundException('Product not found');
     return this.lineView(id, productId);
   }
 
@@ -496,14 +525,37 @@ export class InventoryService {
       },
       orderBy: { product: { name: 'asc' } },
     });
+    // Serial goods can balance out (one unit missing, another found); which units differed
+    // is recorded by the count's own ledger rows, one per serial number.
+    const units = await this.prisma.stockMovement.findMany({
+      where: { inventoryCountId: id, serialUnitId: { not: null } },
+      select: {
+        productId: true,
+        quantity: true,
+        serialUnit: { select: { serialNumber: true } },
+      },
+    });
+    const serialsOf = (productId: string, sign: 1 | -1) =>
+      units
+        .filter(
+          (u) => u.productId === productId && Math.sign(u.quantity) === sign,
+        )
+        .map((u) => u.serialUnit!.serialNumber)
+        .sort();
+
     return lines.map((l) => {
       const expected = l.expectedQuantity ?? 0;
-      return {
+      const row: DiffRow = {
         product: l.product,
         expected,
         counted: l.countedQuantity,
         difference: l.countedQuantity - expected,
       };
+      if (l.product.trackSerial) {
+        row.missingSerials = serialsOf(l.product.id, -1);
+        row.extraSerials = serialsOf(l.product.id, 1);
+      }
+      return row;
     });
   }
 
@@ -555,7 +607,11 @@ export class InventoryService {
       where: { countId_serialNumber: { countId, serialNumber } },
     });
     if (already)
-      throw new ConflictException(`Serial ${serialNumber} is already counted`);
+      throw conflict(
+        'SERIAL_ALREADY_COUNTED',
+        `Serial ${serialNumber} is already counted`,
+        { serial: serialNumber },
+      );
     await tx.inventorySerial.create({
       data: { countId, productId, serialNumber },
     });
@@ -611,8 +667,10 @@ export class InventoryService {
       select: { status: true },
     });
     if (!c) throw new NotFoundException('Inventory count not found');
-    throw new ConflictException(
+    throw conflict(
+      'COUNT_WRONG_STATE',
       `Inventory count is ${c.status} and cannot be ${action}`,
+      { status: c.status },
     );
   }
 
@@ -624,8 +682,10 @@ export class InventoryService {
       count.scopeCategoryIds.length &&
       !count.scopeCategoryIds.includes(product.categoryId)
     ) {
-      throw new BadRequestException(
+      throw badRequest(
+        'OUT_OF_COUNT_SCOPE',
         `"${product.name}" is outside the category being counted`,
+        { product: product.name },
       );
     }
   }
@@ -643,8 +703,10 @@ export class InventoryService {
         unit.status === SerialUnitStatus.IN_STOCK
           ? 'in stock at another warehouse'
           : unit.status;
-      throw new ConflictException(
+      throw conflict(
+        'SERIAL_ELSEWHERE',
         `Serial ${serialNumber} is ${where}; resolve it (e.g. with a transfer) before counting it here`,
+        { serial: serialNumber, status: unit.status },
       );
     }
   }
