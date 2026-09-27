@@ -1,11 +1,11 @@
 import {
   BadRequestException,
-  ConflictException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
 import { formatTransferNumber } from '../common/document-numbers';
 import { pageArgs } from '../common/dto/pagination-query.dto';
+import { badRequest, conflict } from '../common/errors';
 import { LONG_TX } from '../common/transactions';
 import {
   DocumentType,
@@ -169,9 +169,12 @@ export class TransfersService {
         },
       });
       if (!t.items.length)
-        throw new BadRequestException('Transfer has no items');
+        throw badRequest('DOCUMENT_EMPTY', 'Transfer has no items');
       if (!t.toWarehouse.isActive)
-        throw new BadRequestException('Destination warehouse is inactive');
+        throw badRequest(
+          'WAREHOUSE_INACTIVE',
+          'Destination warehouse is inactive',
+        );
 
       for (const item of t.items) {
         await this.ledger.move(tx, {
@@ -242,14 +245,16 @@ export class TransfersService {
       select: { status: true },
     });
     if (!t) throw new NotFoundException('Transfer not found');
-    throw new ConflictException(
+    throw conflict(
+      'TRANSFER_WRONG_STATE',
       `Transfer is ${t.status} and cannot be ${action}`,
+      { status: t.status },
     );
   }
 
   private async validateRoute(tx: Tx, fromId: string, toId: string) {
     if (fromId === toId)
-      throw new BadRequestException('Source and destination must differ');
+      throw badRequest('SAME_WAREHOUSE', 'Source and destination must differ');
     const warehouses = await tx.warehouse.findMany({
       where: { id: { in: [fromId, toId] } },
       select: { id: true, isActive: true },
@@ -259,7 +264,10 @@ export class TransfersService {
     if (!from) throw new BadRequestException('Source warehouse not found');
     if (!to) throw new BadRequestException('Destination warehouse not found');
     if (!to.isActive)
-      throw new BadRequestException('Destination warehouse is inactive');
+      throw badRequest(
+        'WAREHOUSE_INACTIVE',
+        'Destination warehouse is inactive',
+      );
   }
 }
 

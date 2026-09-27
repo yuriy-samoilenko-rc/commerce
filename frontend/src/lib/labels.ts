@@ -67,6 +67,19 @@ export const DOCUMENT_TYPE: Record<string, string> = {
   INVENTORY_ACT: "Popisna lista",
 };
 
+export const RECEIVING_STATUS: Record<string, string> = {
+  DRAFT: "Nacrt",
+  CONFIRMED: "Potvrđen",
+  CANCELLED: "Otkazan",
+};
+
+export const TRANSFER_STATUS: Record<string, string> = {
+  DRAFT: "Nacrt",
+  IN_TRANSIT: "U prenosu",
+  RECEIVED: "Primljen",
+  CANCELLED: "Otkazan",
+};
+
 export const SERIAL_STATUS: Record<string, string> = {
   IN_STOCK: "Na stanju",
   IN_TRANSIT: "U prenosu",

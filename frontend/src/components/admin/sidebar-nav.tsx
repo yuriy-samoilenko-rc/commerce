@@ -1,6 +1,6 @@
 "use client";
 
-import { LayoutDashboard, Package, ShoppingCart, type LucideIcon } from "lucide-react";
+import { LayoutDashboard, Package, PackagePlus, ShoppingCart, Truck, Warehouse, type LucideIcon } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { Role } from "@/lib/backend-types";
@@ -19,6 +19,9 @@ const NAV: NavItem[] = [
   { href: "/admin", label: "Kontrolna tabla", icon: LayoutDashboard },
   { href: "/admin/narudzbe", label: "Narudžbe", icon: ShoppingCart },
   { href: "/admin/proizvodi", label: "Proizvodi", icon: Package },
+  { href: "/admin/skladiste", label: "Skladište", icon: Warehouse },
+  { href: "/admin/prijem", label: "Prijem robe", icon: PackagePlus },
+  { href: "/admin/prenos", label: "Prenos robe", icon: Truck },
 ];
 
 export function SidebarNav({ role, onNavigate }: { role: Role; onNavigate?: () => void }) {

@@ -64,14 +64,14 @@ export default async function ProductsPage({ searchParams }: PageProps<"/admin/p
           name="categoryId"
           label="Kategorija"
           value={filters.categoryId}
-          options={flat.map((c) => [c.id, indented(c)])}
+          options={flat.map((c): [string, string] => [c.id, indented(c)])}
           all="Sve kategorije"
         />
         <FilterSelect
           name="brandId"
           label="Brend"
           value={filters.brandId}
-          options={(brands.data ?? []).map((b) => [b.id, b.name])}
+          options={(brands.data ?? []).map((b): [string, string] => [b.id, b.name])}
           all="Svi brendovi"
         />
         <FilterSelect name="status" label="Status" value={filters.status ?? "active"} options={STATUS} />

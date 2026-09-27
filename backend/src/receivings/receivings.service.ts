@@ -1,10 +1,10 @@
 import {
   BadRequestException,
-  ConflictException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
 import { pageArgs } from '../common/dto/pagination-query.dto';
+import { badRequest, conflict } from '../common/errors';
 import { LONG_TX, inSequence } from '../common/transactions';
 import {
   DocumentType,
@@ -178,7 +178,7 @@ export class ReceivingsService {
         select: { warehouseId: true, items: { orderBy: { id: 'asc' } } },
       });
       if (!receiving.items.length)
-        throw new BadRequestException('Receiving has no items');
+        throw badRequest('DOCUMENT_EMPTY', 'Receiving has no items');
 
       for (const item of receiving.items) {
         await this.ledger.move(tx, {
@@ -214,8 +214,10 @@ export class ReceivingsService {
       select: { status: true },
     });
     if (!r) throw new NotFoundException('Receiving not found');
-    throw new ConflictException(
+    throw conflict(
+      'NOT_DRAFT',
       `Receiving is ${r.status}; only drafts can be changed`,
+      { status: r.status },
     );
   }
 
@@ -241,7 +243,7 @@ export class ReceivingsService {
       throw new BadRequestException('Supplier is inactive');
     if (!warehouse) throw new BadRequestException('Warehouse not found');
     if (!warehouse.isActive)
-      throw new BadRequestException('Warehouse is inactive');
+      throw badRequest('WAREHOUSE_INACTIVE', 'Warehouse is inactive');
   }
 }
 

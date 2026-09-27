@@ -13,6 +13,11 @@ import type { UsersService } from "@backend/users/users.service";
 import type { CategoriesService } from "@backend/categories/categories.service";
 import type { BrandsService } from "@backend/brands/brands.service";
 import type { StockService } from "@backend/stock/stock.service";
+import type { WarehousesService } from "@backend/warehouses/warehouses.service";
+import type { SuppliersService } from "@backend/suppliers/suppliers.service";
+import type { ReceivingsService } from "@backend/receivings/receivings.service";
+import type { DocumentsService } from "@backend/documents/documents.service";
+import type { TransfersService } from "@backend/transfers/transfers.service";
 
 export type Json<T> = T extends { toJSON(): infer R }
   ? R
@@ -43,3 +48,10 @@ export type StockList = Returns<StockService["listStock"]>;
 export type MovementList = Returns<StockService["listMovements"]>;
 export type CustomerList = Returns<UsersService["listCustomers"]>;
 export type Customer = CustomerList["items"][number];
+export type WarehouseList = Returns<WarehousesService["findAll"]>;
+export type SupplierList = Returns<SuppliersService["findAll"]>;
+export type ReceivingList = Returns<ReceivingsService["list"]>;
+export type Receiving = Returns<ReceivingsService["findOne"]>;
+export type DocumentList = Returns<DocumentsService["list"]>;
+export type TransferList = Returns<TransfersService["list"]>;
+export type Transfer = Returns<TransfersService["findOne"]>;

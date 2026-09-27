@@ -1,4 +1,5 @@
 import { BadRequestException } from '@nestjs/common';
+import { badRequest } from '../common/errors';
 import { Tx } from './stock-ledger.service';
 
 export interface DocumentItemInput {
@@ -7,7 +8,8 @@ export interface DocumentItemInput {
   serialNumbers?: string[];
 }
 
-export const cleanSerials = (serials?: string[]) => (serials ?? []).map((s) => s.trim());
+export const cleanSerials = (serials?: string[]) =>
+  (serials ?? []).map((s) => s.trim());
 
 /**
  * Draft-level checks shared by stock documents (receivings, transfers).
@@ -29,18 +31,31 @@ export async function validateDocumentItems(
   const allSerials: string[] = [];
   for (const item of items) {
     const product = byId.get(item.productId);
-    if (!product) throw new BadRequestException(`Product ${item.productId} not found`);
+    if (!product)
+      throw new BadRequestException(`Product ${item.productId} not found`);
     if (product.isArchived && !opts.allowArchived) {
-      throw new BadRequestException(`Product "${product.name}" is archived`);
+      throw badRequest(
+        'PRODUCT_ARCHIVED',
+        `Product "${product.name}" is archived`,
+        {
+          product: product.name,
+        },
+      );
     }
 
     const serials = cleanSerials(item.serialNumbers);
     if (serials.length && !product.trackSerial) {
-      throw new BadRequestException(`Product "${product.name}" is not tracked by serial number`);
+      throw badRequest(
+        'SERIALS_NOT_TRACKED',
+        `Product "${product.name}" is not tracked by serial number`,
+        { product: product.name },
+      );
     }
     if (serials.length > item.quantity) {
-      throw new BadRequestException(
+      throw badRequest(
+        'SERIALS_COUNT_MISMATCH',
         `Product "${product.name}": ${serials.length} serial numbers for quantity ${item.quantity}`,
+        { product: product.name, expected: item.quantity, got: serials.length },
       );
     }
     allSerials.push(...serials);
@@ -48,6 +63,9 @@ export async function validateDocumentItems(
 
   const duplicates = allSerials.filter((s, i) => allSerials.indexOf(s) !== i);
   if (duplicates.length) {
-    throw new BadRequestException(`Duplicate serial numbers: ${[...new Set(duplicates)].join(', ')}`);
+    const list = [...new Set(duplicates)].join(', ');
+    throw badRequest('SERIALS_DUPLICATE', `Duplicate serial numbers: ${list}`, {
+      serials: list,
+    });
   }
 }

@@ -1,4 +1,4 @@
-import { ORDER_STATUS, PAYMENT_STATUS } from "./labels";
+import { ORDER_STATUS, PAYMENT_STATUS, TRANSFER_STATUS } from "./labels";
 
 /**
  * Browser-side API calls. They go to our own /api/backend proxy (same origin),
@@ -20,7 +20,7 @@ type Params = Record<string, string | number>;
 /** The backend's error codes (backend/src/common/errors.ts) in words for people. */
 const CODED: Record<string, (p: Params) => string> = {
   INSUFFICIENT_STOCK: (p) =>
-    `Nema dovoljno robe: „${p.product}“ — traženo ${p.requested}, dostupno ${p.available}.`,
+    `Nema dovoljno robe${p.product ? `: „${p.product}“` : ""} — traženo ${p.requested}, dostupno ${p.available}.`,
   PRODUCT_UNAVAILABLE: (p) => `Proizvod „${p.product}“ više nije u prodaji.`,
   ORDER_WRONG_STATE: (p) =>
     `Radnja nije moguća: narudžba je sada „${ORDER_STATUS[p.status] ?? p.status}“, ${(PAYMENT_STATUS[p.paymentStatus] ?? p.paymentStatus).toLowerCase()}. Osvježite stranicu.`,
@@ -29,6 +29,21 @@ const CODED: Record<string, (p: Params) => string> = {
   SERIAL_MODE_LOCKED: () =>
     "Praćenje serijskih brojeva ne može se mijenjati dok proizvod ima zalihu ili serijske brojeve.",
   DISCOUNT_NOT_LOWER: () => "Akcijska cijena mora biti niža od prodajne.",
+  PRODUCT_ARCHIVED: (p) => `Proizvod „${p.product}“ je arhiviran.`,
+  WAREHOUSE_INACTIVE: () => "Skladište nije aktivno.",
+  SERIALS_NOT_TRACKED: (p) => `Proizvod „${p.product}“ se ne prati po serijskom broju.`,
+  SERIALS_COUNT_MISMATCH: (p) =>
+    `„${p.product}“: potrebno je ${p.expected} serijskih brojeva, uneseno ${p.got}.`,
+  SERIALS_DUPLICATE: (p) => `Serijski brojevi se ponavljaju: ${p.serials}.`,
+  SERIALS_TAKEN: (p) => `Serijski brojevi su već evidentirani: ${p.serials}.`,
+  SERIALS_UNAVAILABLE: (p) => `Serijski brojevi nijesu dostupni na ovom skladištu: ${p.serials}.`,
+  STOCK_BEING_COUNTED: (p) =>
+    `„${p.product}“ je u popisu ${p.count}; kretanja robe su moguća tek kada se popis odobri ili otkaže.`,
+  NOT_DRAFT: () => "Dokument više nije nacrt i ne može se mijenjati. Osvježite stranicu.",
+  DOCUMENT_EMPTY: () => "Dokument nema nijednu stavku.",
+  TRANSFER_WRONG_STATE: (p) =>
+    `Radnja nije moguća: prenos je sada „${TRANSFER_STATUS[p.status] ?? p.status}“. Osvježite stranicu.`,
+  SAME_WAREHOUSE: () => "Skladište iz kojeg i u koje se roba prenosi mora biti različito.",
 };
 
 const FALLBACK: Record<number, string> = {

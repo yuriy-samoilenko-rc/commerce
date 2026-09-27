@@ -8,17 +8,17 @@ import { useState } from "react";
 import { useForm, useWatch } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
+import { ProductSearch } from "@/components/admin/product-search";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { api, ApiError } from "@/lib/api";
-import type { Customer, CustomerList, Order, StaffProduct, StaffProductList } from "@/lib/backend-types";
+import type { Customer, CustomerList, Order, StaffProduct } from "@/lib/backend-types";
 import { count, money } from "@/lib/format";
 import { DELIVERY_METHOD, PAYMENT_METHOD } from "@/lib/labels";
 import { useDebounced } from "@/lib/use-debounced";
-import { cn } from "@/lib/utils";
 
 // Same limits as the backend's CheckoutDto.
 const MAX_QTY = 100;
@@ -141,7 +141,7 @@ export function NewOrderForm() {
             <CardTitle>Proizvodi</CardTitle>
           </CardHeader>
           <CardContent className="flex flex-col gap-4">
-            <ProductSearch onAdd={add} />
+            <ProductSearch onAdd={add} requireStock />
             {lines.length ? (
               <ul className="flex flex-col divide-y rounded-lg border" aria-label="Stavke narudžbe">
                 {lines.map((l) => (
@@ -261,64 +261,6 @@ export function NewOrderForm() {
         </Card>
       </div>
     </form>
-  );
-}
-
-function ProductSearch({ onAdd }: { onAdd: (p: StaffProduct) => void }) {
-  const [text, setText] = useState("");
-  const search = useDebounced(text.trim());
-  const results = useQuery({
-    queryKey: ["admin-products", "pick", search],
-    queryFn: () => api<StaffProductList>(`/admin/products?${new URLSearchParams({ search, limit: "8", sort: "name" })}`),
-    enabled: search.length >= 2,
-  });
-
-  return (
-    <div className="flex flex-col gap-2">
-      <Input
-        type="search"
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-        // A scanner types the barcode and presses Enter: add the single match instead of submitting the form.
-        onKeyDown={(e) => {
-          if (e.key !== "Enter") return;
-          e.preventDefault();
-          const only = results.data?.items.length === 1 ? results.data.items[0] : undefined;
-          if (only && only.stock.available > 0) {
-            onAdd(only);
-            setText("");
-          }
-        }}
-        placeholder="Naziv, šifra ili bar-kod"
-        aria-label="Pretraga proizvoda"
-      />
-      {search.length >= 2 && (
-        <ul className="flex flex-col divide-y rounded-lg border" aria-label="Rezultati pretrage">
-          {results.isPending && <li className="p-3 text-sm text-muted-foreground">Pretraga…</li>}
-          {results.data?.items.length === 0 && <li className="p-3 text-sm text-muted-foreground">Nema proizvoda za „{search}“.</li>}
-          {results.data?.items.map((p) => {
-            const out = p.stock.available <= 0;
-            return (
-              <li key={p.id} className="flex items-center gap-3 p-2 pl-3">
-                <div className="min-w-0 flex-1">
-                  <div className="truncate text-sm">{p.name}</div>
-                  <div className="text-xs text-muted-foreground">
-                    {p.sku} · {money(price(p))}
-                    {p.discountPrice && <span className="ml-1 line-through">{money(p.sellingPrice)}</span>}
-                  </div>
-                </div>
-                <span className={cn("text-xs whitespace-nowrap", out ? "text-destructive" : "text-muted-foreground")}>
-                  {out ? "Nema na stanju" : `Dostupno ${count(p.stock.available)}`}
-                </span>
-                <Button type="button" size="sm" variant="outline" disabled={out} onClick={() => onAdd(p)} aria-label={`Dodaj: ${p.name}`}>
-                  <Plus /> Dodaj
-                </Button>
-              </li>
-            );
-          })}
-        </ul>
-      )}
-    </div>
   );
 }
 

@@ -68,6 +68,47 @@ export async function seedProduct(stock = 5) {
   return { product, warehouse, token, run };
 }
 
+/** A product, an empty warehouse and a supplier: everything a receiving needs. */
+export async function seedReceivingSetup(opts: { trackSerial?: boolean } = {}) {
+  const token = await adminToken();
+  const run = `${Date.now()}${Math.floor(Math.random() * 1000)}`;
+  const post = <T>(path: string, json: unknown) => backend<T>(path, { method: "POST", token, json });
+  const category = await post<{ id: string }>("/categories", { name: `E2E prijem ${run}` });
+  const product = await post<{ id: string; sku: string; name: string }>("/admin/products", {
+    name: `E2E ${opts.trackSerial ? "telefon" : "kabl"} ${run}`,
+    sku: `E2R-${run}`,
+    purchasePrice: 100,
+    sellingPrice: 199,
+    trackSerial: opts.trackSerial ?? false,
+    categoryId: category.id,
+  });
+  const warehouse = await post<{ id: string; name: string }>("/warehouses", { name: `E2E magacin ${run}` });
+  const supplier = await post<{ id: string; name: string }>("/suppliers", { name: `E2E dobavljač ${run}` });
+  return { product, warehouse, supplier, run };
+}
+
+/** One more (empty) warehouse. */
+export async function seedWarehouse(name: string) {
+  const token = await adminToken();
+  return backend<{ id: string; name: string }>("/warehouses", {
+    method: "POST",
+    token,
+    json: { name: `${name} ${Date.now()}${Math.floor(Math.random() * 1000)}` },
+  });
+}
+
+/** Puts goods of a seeded setup on its warehouse through a confirmed receiving. */
+export async function receiveStock(s: Awaited<ReturnType<typeof seedReceivingSetup>>, quantity: number, serials?: string[]) {
+  const token = await adminToken();
+  const post = <T>(path: string, json: unknown) => backend<T>(path, { method: "POST", token, json });
+  const r = await post<{ id: string }>("/receivings", {
+    supplierId: s.supplier.id,
+    warehouseId: s.warehouse.id,
+    items: [{ productId: s.product.id, quantity, purchasePrice: 100, serialNumbers: serials }],
+  });
+  await post(`/receivings/${r.id}/confirm`, {});
+}
+
 /** An empty category and a brand to pick in the product form. */
 export async function seedCatalog() {
   const token = await adminToken();

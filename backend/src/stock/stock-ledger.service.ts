@@ -3,7 +3,7 @@ import {
   ConflictException,
   Injectable,
 } from '@nestjs/common';
-import { conflict } from '../common/errors';
+import { badRequest, conflict } from '../common/errors';
 import { inSequence } from '../common/transactions';
 import { formatCountNumber } from '../common/document-numbers';
 import { StockAlertService } from '../notifications/stock-alert.service';
@@ -119,17 +119,23 @@ export class StockLedgerService {
 
     // Only brand-new goods are blocked; stock already on the way must be able to arrive.
     if (incoming && rule.newGoods && product.isArchived) {
-      throw new BadRequestException(`Product "${product.name}" is archived`);
+      throw badRequest(
+        'PRODUCT_ARCHIVED',
+        `Product "${product.name}" is archived`,
+        { product: product.name },
+      );
     }
     if (incoming && rule.newGoods && !warehouse.isActive) {
-      throw new BadRequestException('Warehouse is inactive');
+      throw badRequest('WAREHOUSE_INACTIVE', 'Warehouse is inactive');
     }
 
     const serials = input.serialNumbers ?? [];
     if (!product.trackSerial) {
       if (serials.length) {
-        throw new BadRequestException(
+        throw badRequest(
+          'SERIALS_NOT_TRACKED',
           `Product "${product.name}" is not tracked by serial number`,
+          { product: product.name },
         );
       }
       await this.post(tx, input);
@@ -137,14 +143,25 @@ export class StockLedgerService {
     }
 
     if (serials.length !== Math.abs(input.quantity)) {
-      throw new BadRequestException(
+      throw badRequest(
+        'SERIALS_COUNT_MISMATCH',
         `Product "${product.name}" needs exactly ${Math.abs(input.quantity)} serial numbers, got ${serials.length}`,
+        {
+          product: product.name,
+          expected: Math.abs(input.quantity),
+          got: serials.length,
+        },
       );
     }
     const duplicates = serials.filter((s, i) => serials.indexOf(s) !== i);
     if (duplicates.length) {
-      throw new BadRequestException(
-        `Duplicate serial numbers: ${[...new Set(duplicates)].join(', ')}`,
+      const list = [...new Set(duplicates)].join(', ');
+      throw badRequest(
+        'SERIALS_DUPLICATE',
+        `Duplicate serial numbers: ${list}`,
+        {
+          serials: list,
+        },
       );
     }
 
@@ -516,9 +533,11 @@ export class StockLedgerService {
       select: { number: true },
     });
     if (count) {
-      throw new ConflictException(
+      throw conflict(
+        'STOCK_BEING_COUNTED',
         `"${productName}" is being counted in ${formatCountNumber(count.number)} at this warehouse; ` +
           'stock movements resume once the count is approved or cancelled',
+        { product: productName, count: formatCountNumber(count.number) },
       );
     }
   }
@@ -534,8 +553,11 @@ export class StockLedgerService {
       select: { serialNumber: true },
     });
     if (taken.length) {
-      throw new ConflictException(
-        `Serial numbers already registered: ${taken.map((t) => t.serialNumber).join(', ')}`,
+      const list = taken.map((t) => t.serialNumber).join(', ');
+      throw conflict(
+        'SERIALS_TAKEN',
+        `Serial numbers already registered: ${list}`,
+        { serials: list },
       );
     }
     const units = await tx.serialUnit.createManyAndReturn({
@@ -617,7 +639,11 @@ export class StockLedgerService {
     const found = new Set(units.map((u) => u.serialNumber));
     const missing = serials.filter((s) => !found.has(s));
     if (missing.length)
-      throw new BadRequestException(`${missingMessage}: ${missing.join(', ')}`);
+      throw badRequest(
+        'SERIALS_UNAVAILABLE',
+        `${missingMessage}: ${missing.join(', ')}`,
+        { serials: missing.join(', ') },
+      );
 
     const ids = units.map((u) => u.id);
     // Repeating the expected state in WHERE makes this safe against a concurrent
@@ -738,8 +764,15 @@ export class StockLedgerService {
         select: { quantity: true, reserved: true },
       });
       const available = current ? current.quantity - current.reserved : 0;
-      throw new BadRequestException(
-        `Not enough available stock: requested ${-delta}, available ${available}`,
+      // Looked up only on this path: the message should say which product is short.
+      const product = await tx.product.findUnique({
+        where: { id: productId },
+        select: { name: true },
+      });
+      throw badRequest(
+        'INSUFFICIENT_STOCK',
+        `Not enough available stock of "${product?.name}": requested ${-delta}, available ${available}`,
+        { product: product?.name ?? '', requested: -delta, available },
       );
     }
     return rows[0].quantity;

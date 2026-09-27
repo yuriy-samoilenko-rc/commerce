@@ -15,7 +15,8 @@ export function Providers({ children }: { children: React.ReactNode }) {
   return (
     <QueryClientProvider client={client}>
       {children}
-      <Toaster position="top-right" richColors />
+      {/* Centered: in a corner it covers the page's action buttons (and stays while hovered). */}
+      <Toaster position="top-center" richColors />
     </QueryClientProvider>
   );
 }
