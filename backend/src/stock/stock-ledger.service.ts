@@ -473,8 +473,10 @@ export class StockLedgerService {
       select: { id: true },
     });
     if (!replacement) {
-      throw new BadRequestException(
+      throw badRequest(
+        'REPLACEMENT_UNAVAILABLE',
         `Serial ${input.serialNumber} is not a free unit of "${faulty.product.name}" on this warehouse's shelf`,
+        { serial: input.serialNumber, product: faulty.product.name },
       );
     }
 

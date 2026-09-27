@@ -69,7 +69,7 @@ export async function seedProduct(stock = 5) {
 }
 
 /** A product, an empty warehouse and a supplier: everything a receiving needs. */
-export async function seedReceivingSetup(opts: { trackSerial?: boolean } = {}) {
+export async function seedReceivingSetup(opts: { trackSerial?: boolean; warrantyMonths?: number } = {}) {
   const token = await adminToken();
   const run = `${Date.now()}${Math.floor(Math.random() * 1000)}`;
   const post = <T>(path: string, json: unknown) => backend<T>(path, { method: "POST", token, json });
@@ -80,6 +80,7 @@ export async function seedReceivingSetup(opts: { trackSerial?: boolean } = {}) {
     purchasePrice: 100,
     sellingPrice: 199,
     trackSerial: opts.trackSerial ?? false,
+    warrantyMonths: opts.warrantyMonths,
     categoryId: category.id,
   });
   const warehouse = await post<{ id: string; name: string }>("/warehouses", { name: `E2E magacin ${run}` });
@@ -95,6 +96,33 @@ export async function deliverOrder(o: Awaited<ReturnType<typeof seedOrder>>) {
   await post(`/admin/orders/${o.id}/start-picking`);
   await pickAll(o);
   await post(`/admin/orders/${o.id}/ship`);
+}
+
+/**
+ * A serial-tracked product with a 24-month warranty: two units received, the first one
+ * sold and handed over to a customer. Returns both serial numbers.
+ */
+export async function sellSerialUnit() {
+  const s = await seedReceivingSetup({ trackSerial: true, warrantyMonths: 24 });
+  const sold = `W-${s.run}-1`;
+  const spare = `W-${s.run}-2`;
+  await receiveStock(s, 2, [sold, spare]);
+  const token = await adminToken();
+  const post = <T>(path: string, json: unknown = {}) => backend<T>(path, { method: "POST", token, json });
+  const order = await post<{ id: string; number: number }>("/admin/orders", {
+    items: [{ productId: s.product.id, quantity: 1 }],
+    customerName: `Garancija ${s.run}`,
+    customerPhone: "+382 67 555 000",
+    deliveryMethod: "PICKUP",
+    paymentMethod: "BANK_TRANSFER",
+  });
+  await post(`/admin/orders/${order.id}/confirm`);
+  await post(`/admin/orders/${order.id}/mark-paid`);
+  await post(`/admin/orders/${order.id}/start-picking`);
+  await post(`/admin/orders/${order.id}/pick`, { code: sold, warehouseId: s.warehouse.id });
+  await post(`/admin/orders/${order.id}/complete-picking`);
+  await post(`/admin/orders/${order.id}/ship`);
+  return { ...s, order, sold, spare };
 }
 
 /** One more (empty) warehouse. */

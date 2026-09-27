@@ -45,6 +45,14 @@ export type ErrorCode =
   | 'RETURN_PERIOD_PASSED'
   | 'RETURN_UNDECIDED'
   | 'RETURN_UNITS_CHANGED'
+  | 'SERIAL_NOT_FOUND'
+  | 'WARRANTY_UNIT_NOT_SOLD'
+  | 'NO_WARRANTY'
+  | 'WARRANTY_EXPIRED'
+  | 'WARRANTY_ALREADY_OPEN'
+  | 'WARRANTY_WRONG_STATE'
+  | 'UNIT_STATE_CHANGED'
+  | 'REPLACEMENT_UNAVAILABLE'
   | 'DOCUMENT_EMPTY';
 
 export type ErrorParams = Record<string, string | number>;

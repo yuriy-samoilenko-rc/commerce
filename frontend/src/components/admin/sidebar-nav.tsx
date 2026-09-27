@@ -1,6 +1,6 @@
 "use client";
 
-import { ClipboardCheck, LayoutDashboard, RotateCcw, Package, PackagePlus, ShoppingCart, Truck, Warehouse, type LucideIcon } from "lucide-react";
+import { ClipboardCheck, LayoutDashboard, RotateCcw, ShieldCheck, Package, PackagePlus, ShoppingCart, Truck, Warehouse, type LucideIcon } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { Role } from "@/lib/backend-types";
@@ -19,6 +19,7 @@ const NAV: NavItem[] = [
   { href: "/admin", label: "Kontrolna tabla", icon: LayoutDashboard },
   { href: "/admin/narudzbe", label: "Narudžbe", icon: ShoppingCart },
   { href: "/admin/povracaji", label: "Povraćaji", icon: RotateCcw },
+  { href: "/admin/garancija", label: "Garancija", icon: ShieldCheck },
   { href: "/admin/proizvodi", label: "Proizvodi", icon: Package },
   { href: "/admin/skladiste", label: "Skladište", icon: Warehouse },
   { href: "/admin/prijem", label: "Prijem robe", icon: PackagePlus },

@@ -1,11 +1,20 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { warrantyUntil } from '../common/dates';
 import { formatWarrantyNumber } from '../common/document-numbers';
 import { pageArgs } from '../common/dto/pagination-query.dto';
-import { Prisma, SerialUnitStatus, WarrantyStatus } from '../generated/prisma/client';
+import { conflict, notFound } from '../common/errors';
+import {
+  Prisma,
+  SerialUnitStatus,
+  WarrantyStatus,
+} from '../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { StockLedgerService, Tx } from '../stock/stock-ledger.service';
-import { CreateWarrantyCaseDto, ReplaceUnitDto, WarrantyQueryDto } from './dto/warranty.dto';
+import {
+  CreateWarrantyCaseDto,
+  ReplaceUnitDto,
+  WarrantyQueryDto,
+} from './dto/warranty.dto';
 
 const OPEN: WarrantyStatus[] = [
   WarrantyStatus.OPEN,
@@ -19,9 +28,20 @@ const unitSelect = {
   serialNumber: true,
   status: true,
   soldAt: true,
-  product: { select: { id: true, name: true, sku: true, warrantyMonths: true } },
+  product: {
+    select: { id: true, name: true, sku: true, warrantyMonths: true },
+  },
   orderItem: {
-    select: { order: { select: { id: true, number: true, customerName: true, customerPhone: true } } },
+    select: {
+      order: {
+        select: {
+          id: true,
+          number: true,
+          customerName: true,
+          customerPhone: true,
+        },
+      },
+    },
   },
 } satisfies Prisma.SerialUnitSelect;
 
@@ -50,7 +70,10 @@ function present({ serialUnit: { orderItem, ...unit }, ...c }: CaseRow) {
   return {
     ...c,
     number: formatWarrantyNumber(c.number),
-    unit: { ...unit, warrantyUntil: warrantyUntil(unit.soldAt, unit.product.warrantyMonths) },
+    unit: {
+      ...unit,
+      warrantyUntil: warrantyUntil(unit.soldAt, unit.product.warrantyMonths),
+    },
     order: orderItem?.order ?? null,
   };
 }
@@ -66,16 +89,32 @@ export class WarrantyService {
   async create(dto: CreateWarrantyCaseDto, userId: string) {
     const unit = await this.prisma.serialUnit.findUnique({
       where: { serialNumber: dto.serialNumber.trim() },
-      select: { id: true, status: true, soldAt: true, product: { select: { warrantyMonths: true } } },
+      select: {
+        id: true,
+        status: true,
+        soldAt: true,
+        product: { select: { warrantyMonths: true } },
+      },
     });
-    if (!unit) throw new NotFoundException('Serial number not found');
+    if (!unit)
+      throw notFound('SERIAL_NOT_FOUND', 'Serial number not found', {
+        serial: dto.serialNumber.trim(),
+      });
     if (unit.status !== SerialUnitStatus.SOLD) {
-      throw new ConflictException(`Unit is ${unit.status}; only sold units are under warranty`);
+      throw conflict(
+        'WARRANTY_UNIT_NOT_SOLD',
+        `Unit is ${unit.status}; only sold units are under warranty`,
+        { status: unit.status },
+      );
     }
     const until = warrantyUntil(unit.soldAt, unit.product.warrantyMonths);
-    if (!until) throw new ConflictException('This product has no warranty');
+    if (!until) throw conflict('NO_WARRANTY', 'This product has no warranty');
     if (until <= new Date()) {
-      throw new ConflictException(`Warranty expired on ${until.toISOString().slice(0, 10)}`);
+      throw conflict(
+        'WARRANTY_EXPIRED',
+        `Warranty expired on ${until.toISOString().slice(0, 10)}`,
+        { until: until.toISOString() },
+      );
     }
 
     const open = await this.prisma.warrantyCase.findFirst({
@@ -83,12 +122,21 @@ export class WarrantyService {
       select: { number: true },
     });
     if (open) {
-      throw new ConflictException(`${formatWarrantyNumber(open.number)} is already open for this unit`);
+      const number = formatWarrantyNumber(open.number);
+      throw conflict(
+        'WARRANTY_ALREADY_OPEN',
+        `${number} is already open for this unit`,
+        { case: number },
+      );
     }
 
     // The partial unique index still guards the race between the check and the insert.
     const c = await this.prisma.warrantyCase.create({
-      data: { serialUnitId: unit.id, problem: dto.problem, createdById: userId },
+      data: {
+        serialUnitId: unit.id,
+        problem: dto.problem,
+        createdById: userId,
+      },
       select: { id: true },
     });
     return this.findOne(c.id);
@@ -104,7 +152,12 @@ export class WarrantyService {
         { status: WarrantyStatus.RECEIVED, receivedAt: new Date() },
         'received',
       );
-      await this.setUnit(tx, unitId, SerialUnitStatus.SOLD, SerialUnitStatus.IN_SERVICE);
+      await this.setUnit(
+        tx,
+        unitId,
+        SerialUnitStatus.SOLD,
+        SerialUnitStatus.IN_SERVICE,
+      );
     });
     return this.findOne(id);
   }
@@ -115,7 +168,11 @@ export class WarrantyService {
         tx,
         id,
         [WarrantyStatus.RECEIVED],
-        { status: WarrantyStatus.IN_SERVICE, serviceCenter, sentToServiceAt: new Date() },
+        {
+          status: WarrantyStatus.IN_SERVICE,
+          serviceCenter,
+          sentToServiceAt: new Date(),
+        },
         'sent to service',
       ),
     );
@@ -128,7 +185,11 @@ export class WarrantyService {
         tx,
         id,
         [WarrantyStatus.IN_SERVICE],
-        { status: WarrantyStatus.REPAIRED, repairedAt: new Date(), resolutionNote: note ?? null },
+        {
+          status: WarrantyStatus.REPAIRED,
+          repairedAt: new Date(),
+          resolutionNote: note ?? null,
+        },
         'marked as repaired',
       ),
     );
@@ -142,10 +203,19 @@ export class WarrantyService {
         tx,
         id,
         [WarrantyStatus.RECEIVED, WarrantyStatus.REPAIRED],
-        { status: WarrantyStatus.CLOSED, closedAt: new Date(), ...(note && { resolutionNote: note }) },
+        {
+          status: WarrantyStatus.CLOSED,
+          closedAt: new Date(),
+          ...(note && { resolutionNote: note }),
+        },
         'closed',
       );
-      await this.setUnit(tx, unitId, SerialUnitStatus.IN_SERVICE, SerialUnitStatus.SOLD);
+      await this.setUnit(
+        tx,
+        unitId,
+        SerialUnitStatus.IN_SERVICE,
+        SerialUnitStatus.SOLD,
+      );
     });
     return this.findOne(id);
   }
@@ -156,7 +226,11 @@ export class WarrantyService {
       const unitId = await this.transition(
         tx,
         id,
-        [WarrantyStatus.RECEIVED, WarrantyStatus.IN_SERVICE, WarrantyStatus.REPAIRED],
+        [
+          WarrantyStatus.RECEIVED,
+          WarrantyStatus.IN_SERVICE,
+          WarrantyStatus.REPAIRED,
+        ],
         {
           status: WarrantyStatus.REPLACED,
           closedAt: new Date(),
@@ -172,7 +246,10 @@ export class WarrantyService {
         userId,
         warrantyCaseId: id,
       });
-      await tx.warrantyCase.update({ where: { id }, data: { replacementUnitId: replacementId } });
+      await tx.warrantyCase.update({
+        where: { id },
+        data: { replacementUnitId: replacementId },
+      });
     });
     return this.findOne(id);
   }
@@ -180,23 +257,38 @@ export class WarrantyService {
   /** Not a warranty case (e.g. physical damage); the unit goes back as it is. */
   async reject(id: string, note: string) {
     await this.prisma.$transaction(async (tx) => {
-      const before = await tx.warrantyCase.findUnique({ where: { id }, select: { status: true } });
+      const before = await tx.warrantyCase.findUnique({
+        where: { id },
+        select: { status: true },
+      });
       const unitId = await this.transition(
         tx,
         id,
         [WarrantyStatus.OPEN, WarrantyStatus.RECEIVED],
-        { status: WarrantyStatus.REJECTED, closedAt: new Date(), resolutionNote: note },
+        {
+          status: WarrantyStatus.REJECTED,
+          closedAt: new Date(),
+          resolutionNote: note,
+        },
         'rejected',
       );
       if (before?.status === WarrantyStatus.RECEIVED) {
-        await this.setUnit(tx, unitId, SerialUnitStatus.IN_SERVICE, SerialUnitStatus.SOLD);
+        await this.setUnit(
+          tx,
+          unitId,
+          SerialUnitStatus.IN_SERVICE,
+          SerialUnitStatus.SOLD,
+        );
       }
     });
     return this.findOne(id);
   }
 
   async findOne(id: string) {
-    const c = await this.prisma.warrantyCase.findUnique({ where: { id }, select: caseSelect });
+    const c = await this.prisma.warrantyCase.findUnique({
+      where: { id },
+      select: caseSelect,
+    });
     if (!c) throw new NotFoundException('Warranty case not found');
     return present(c);
   }
@@ -222,18 +314,37 @@ export class WarrantyService {
     data: Prisma.WarrantyCaseUncheckedUpdateManyInput,
     action: string,
   ) {
-    const { count } = await tx.warrantyCase.updateMany({ where: { id, status: { in: from } }, data });
-    const c = await tx.warrantyCase.findUnique({ where: { id }, select: { status: true, serialUnitId: true } });
+    const { count } = await tx.warrantyCase.updateMany({
+      where: { id, status: { in: from } },
+      data,
+    });
+    const c = await tx.warrantyCase.findUnique({
+      where: { id },
+      select: { status: true, serialUnitId: true },
+    });
     if (!c) throw new NotFoundException('Warranty case not found');
-    if (!count) throw new ConflictException(`Warranty case is ${c.status} and cannot be ${action}`);
+    if (!count)
+      throw conflict(
+        'WARRANTY_WRONG_STATE',
+        `Warranty case is ${c.status} and cannot be ${action}`,
+        { status: c.status },
+      );
     return c.serialUnitId;
   }
 
-  private async setUnit(tx: Tx, unitId: string, from: SerialUnitStatus, to: SerialUnitStatus) {
+  private async setUnit(
+    tx: Tx,
+    unitId: string,
+    from: SerialUnitStatus,
+    to: SerialUnitStatus,
+  ) {
     const { count } = await tx.serialUnit.updateMany({
       where: { id: unitId, status: from },
       data: { status: to },
     });
-    if (!count) throw new ConflictException(`The unit is no longer ${from}`);
+    if (!count)
+      throw conflict('UNIT_STATE_CHANGED', `The unit is no longer ${from}`, {
+        status: from,
+      });
   }
 }

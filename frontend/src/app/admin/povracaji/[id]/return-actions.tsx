@@ -3,104 +3,16 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
+import { FieldDialog } from "@/components/admin/field-dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  Dialog,
-  DialogClose,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { api, ApiError } from "@/lib/api";
 import type { ReturnDetail } from "@/lib/backend-types";
 import { RETURN_DECISION } from "@/lib/labels";
 
 const message = (e: unknown) => (e instanceof ApiError ? e.message : "Došlo je do greške. Pokušajte ponovo.");
-
-/** A dialog with one field that POSTs `{ [name]: value }`. */
-function FieldDialog({
-  path,
-  label,
-  title,
-  description,
-  done,
-  field,
-}: {
-  path: string;
-  label: string;
-  title: string;
-  description: string;
-  done: string;
-  field:
-    | { name: string; label: string; kind: "select"; options: { id: string; name: string }[] }
-    | { name: string; label: string; kind: "text"; optional: true };
-}) {
-  const router = useRouter();
-  const [open, setOpen] = useState(false);
-  const [value, setValue] = useState(field.kind === "select" ? (field.options[0]?.id ?? "") : "");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  async function run() {
-    setBusy(true);
-    setError(null);
-    try {
-      await api(path, { method: "POST", json: { [field.name]: value.trim() || undefined } });
-      toast.success(done);
-      setOpen(false);
-      router.refresh();
-    } catch (e) {
-      setError(message(e));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <>
-      <Button onClick={() => setOpen(true)}>{label}</Button>
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{title}</DialogTitle>
-            <DialogDescription>{description}</DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-1.5">
-            <Label htmlFor="action-field">{field.label}</Label>
-            {field.kind === "select" ? (
-              <NativeSelect id="action-field" className="w-full" value={value} onChange={(e) => setValue(e.target.value)}>
-                {field.options.map((o) => (
-                  <NativeSelectOption key={o.id} value={o.id}>
-                    {o.name}
-                  </NativeSelectOption>
-                ))}
-              </NativeSelect>
-            ) : (
-              <Input id="action-field" maxLength={200} value={value} onChange={(e) => setValue(e.target.value)} />
-            )}
-          </div>
-          {error && (
-            <p role="alert" className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
-              {error}
-            </p>
-          )}
-          <DialogFooter>
-            <DialogClose render={<Button variant="outline" />}>Nazad</DialogClose>
-            <Button disabled={busy || (field.kind === "select" && !value)} onClick={run}>
-              {label}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </>
-  );
-}
 
 export function ReceiveReturn({ id, warehouses }: { id: string; warehouses: { id: string; name: string }[] }) {
   return (
@@ -110,7 +22,7 @@ export function ReceiveReturn({ id, warehouses }: { id: string; warehouses: { id
       title="Roba je stigla od kupca?"
       description="Roba ulazi u zonu povraćaja izabranog skladišta i čeka pregled; još se ne prodaje."
       done="Roba je primljena na pregled."
-      field={{ name: "warehouseId", label: "Skladište", kind: "select", options: warehouses }}
+      fields={[{ name: "warehouseId", label: "Skladište", kind: "select", options: warehouses }]}
     />
   );
 }
@@ -123,7 +35,7 @@ export function RefundReturn({ id, amount }: { id: string; amount: string }) {
       title="Novac je vraćen kupcu?"
       description={`Iznos za povraćaj: ${amount}. Upišite broj naloga, transakcije ili priznanice.`}
       done="Povraćaj novca je evidentiran."
-      field={{ name: "reference", label: "Referenca uplate (nije obavezna)", kind: "text", optional: true }}
+      fields={[{ name: "reference", label: "Referenca uplate (nije obavezna)", kind: "text", maxLength: 200 }]}
     />
   );
 }

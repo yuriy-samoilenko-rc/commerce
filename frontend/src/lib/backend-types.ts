@@ -20,6 +20,7 @@ import type { DocumentsService } from "@backend/documents/documents.service";
 import type { TransfersService } from "@backend/transfers/transfers.service";
 import type { InventoryService } from "@backend/inventory/inventory.service";
 import type { ReturnsService } from "@backend/returns/returns.service";
+import type { WarrantyService } from "@backend/warranty/warranty.service";
 
 export type Json<T> = T extends { toJSON(): infer R }
   ? R
@@ -62,3 +63,6 @@ export type Count = Returns<InventoryService["findOne"]>;
 export type CountLineView = Returns<InventoryService["scan"]>;
 export type ReturnList = Returns<ReturnsService["listForStaff"]>;
 export type ReturnDetail = Returns<ReturnsService["findForStaff"]>;
+export type WarrantyList = Returns<WarrantyService["list"]>;
+export type WarrantyCase = Returns<WarrantyService["findOne"]>;
+export type SerialInfo = Returns<StockService["findSerial"]>;

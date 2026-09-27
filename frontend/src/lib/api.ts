@@ -1,4 +1,5 @@
-import { COUNT_STATUS, ORDER_STATUS, PAYMENT_STATUS, RETURN_STATUS, SERIAL_STATUS, TRANSFER_STATUS } from "./labels";
+import { date } from "./format";
+import { COUNT_STATUS, ORDER_STATUS, PAYMENT_STATUS, RETURN_STATUS, SERIAL_STATUS, TRANSFER_STATUS, WARRANTY_STATUS } from "./labels";
 
 /**
  * Browser-side API calls. They go to our own /api/backend proxy (same origin),
@@ -65,6 +66,17 @@ const CODED: Record<string, (p: Params) => string> = {
     `Rok od ${p.days} dana za povraćaj „${p.product}“ je istekao; kvar se rješava kroz garanciju.`,
   RETURN_UNDECIDED: () => "Prije odobrenja donesite odluku za svaku stavku.",
   RETURN_UNITS_CHANGED: () => "Neki vraćeni komadi više nijesu u statusu „prodato“; provjerite serijske brojeve.",
+  SERIAL_NOT_FOUND: (p) => `Serijski broj „${p.serial}“ nije pronađen.`,
+  WARRANTY_UNIT_NOT_SOLD: (p) =>
+    `Garancija važi samo za prodate komade; ovaj je „${SERIAL_STATUS[p.status] ?? p.status}“.`,
+  NO_WARRANTY: () => "Ovaj proizvod nema garanciju.",
+  WARRANTY_EXPIRED: (p) => `Garancija je istekla ${date(String(p.until))}.`,
+  WARRANTY_ALREADY_OPEN: (p) => `Za ovaj komad je već otvoren garantni zahtjev ${p.case}.`,
+  WARRANTY_WRONG_STATE: (p) =>
+    `Radnja nije moguća: zahtjev je sada „${WARRANTY_STATUS[p.status] ?? p.status}“. Osvježite stranicu.`,
+  UNIT_STATE_CHANGED: () => "Status uređaja se u međuvremenu promijenio. Osvježite stranicu.",
+  REPLACEMENT_UNAVAILABLE: (p) =>
+    `Serijski broj ${p.serial} nije slobodan komad proizvoda „${p.product}“ na polici izabranog skladišta.`,
 };
 
 const FALLBACK: Record<number, string> = {
