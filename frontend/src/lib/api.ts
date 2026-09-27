@@ -1,4 +1,4 @@
-import { COUNT_STATUS, ORDER_STATUS, PAYMENT_STATUS, SERIAL_STATUS, TRANSFER_STATUS } from "./labels";
+import { COUNT_STATUS, ORDER_STATUS, PAYMENT_STATUS, RETURN_STATUS, SERIAL_STATUS, TRANSFER_STATUS } from "./labels";
 
 /**
  * Browser-side API calls. They go to our own /api/backend proxy (same origin),
@@ -56,6 +56,15 @@ const CODED: Record<string, (p: Params) => string> = {
   SERIAL_ELSEWHERE: (p) =>
     `Serijski broj ${p.serial} nije na polici ovog skladišta (${SERIAL_STATUS[p.status] ?? p.status}). Riješite to prije brojanja, npr. prenosom.`,
   OUT_OF_COUNT_SCOPE: (p) => `„${p.product}“ nije u kategoriji koja se broji.`,
+  ORDER_NOT_RETURNABLE: (p) =>
+    `Povraćaj je moguć samo za isporučene narudžbe; ova je „${ORDER_STATUS[p.status] ?? p.status}“.`,
+  RETURN_WRONG_STATE: (p) =>
+    `Radnja nije moguća: povraćaj je sada „${RETURN_STATUS[p.status] ?? p.status}“. Osvježite stranicu.`,
+  RETURN_QTY_EXCEEDED: (p) => `Od „${p.product}“ se može vratiti još najviše ${p.left} kom.`,
+  RETURN_PERIOD_PASSED: (p) =>
+    `Rok od ${p.days} dana za povraćaj „${p.product}“ je istekao; kvar se rješava kroz garanciju.`,
+  RETURN_UNDECIDED: () => "Prije odobrenja donesite odluku za svaku stavku.",
+  RETURN_UNITS_CHANGED: () => "Neki vraćeni komadi više nijesu u statusu „prodato“; provjerite serijske brojeve.",
 };
 
 const FALLBACK: Record<number, string> = {

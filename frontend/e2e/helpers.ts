@@ -87,6 +87,16 @@ export async function seedReceivingSetup(opts: { trackSerial?: boolean } = {}) {
   return { product, warehouse, supplier, run };
 }
 
+/** Takes a seeded order all the way to the customer (confirm, pay, pick, hand over). */
+export async function deliverOrder(o: Awaited<ReturnType<typeof seedOrder>>) {
+  const post = (path: string, json: unknown = {}) => backend(path, { method: "POST", token: o.token, json });
+  await post(`/admin/orders/${o.id}/confirm`);
+  await post(`/admin/orders/${o.id}/mark-paid`);
+  await post(`/admin/orders/${o.id}/start-picking`);
+  await pickAll(o);
+  await post(`/admin/orders/${o.id}/ship`);
+}
+
 /** One more (empty) warehouse. */
 export async function seedWarehouse(name: string) {
   const token = await adminToken();

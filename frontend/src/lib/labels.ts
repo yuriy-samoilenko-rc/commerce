@@ -87,6 +87,39 @@ export const COUNT_STATUS: Record<string, string> = {
   CANCELLED: "Otkazan",
 };
 
+export const RETURN_STATUS: Record<string, string> = {
+  REQUESTED: "Zahtjev primljen",
+  RECEIVED: "Roba vraćena",
+  APPROVED: "Odobren",
+  REJECTED: "Odbijen",
+  REFUNDED: "Novac vraćen",
+  CANCELLED: "Otkazan",
+};
+
+export const RETURN_REASON: Record<string, string> = {
+  DEFECTIVE: "Neispravan",
+  CHANGED_MIND: "Kupac se predomislio",
+  DAMAGED: "Oštećen pri isporuci",
+  WRONG_ITEM: "Pogrešan artikal",
+  OTHER: "Drugo",
+};
+
+export const RETURN_DECISION: Record<string, string> = {
+  RESTOCK: "Vraća se na stanje",
+  SCRAP: "Otpis",
+  REJECT: "Povraćaj odbijen",
+};
+
+export const WARRANTY_STATUS: Record<string, string> = {
+  OPEN: "Otvoreno",
+  RECEIVED: "Uređaj primljen",
+  IN_SERVICE: "U servisu",
+  REPAIRED: "Popravljeno",
+  CLOSED: "Zatvoreno",
+  REPLACED: "Zamijenjeno",
+  REJECTED: "Odbijeno",
+};
+
 export const SERIAL_STATUS: Record<string, string> = {
   IN_STOCK: "Na stanju",
   IN_TRANSIT: "U prenosu",

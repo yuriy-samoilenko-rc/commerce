@@ -6,12 +6,14 @@ import { DataTable } from "@/components/admin/data-table";
 import { Facts } from "@/components/admin/facts";
 import { OrderBadges } from "@/components/admin/order-badges";
 import { Badge } from "@/components/ui/badge";
+import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { Order } from "@/lib/backend-types";
 import { dateTime, money } from "@/lib/format";
 import { isUuid } from "@/lib/ids";
 import { DELIVERY_METHOD, DOCUMENT_TYPE, ORDER_CHANNEL, ORDER_EVENT, PAYMENT_METHOD } from "@/lib/labels";
 import { apiServer, requireUser } from "@/lib/session";
+import { canHandleReturns, RETURNABLE_ORDER } from "../../povracaji/data";
 import { OrderActions } from "./order-actions";
 
 // Shared by generateMetadata and the page: one API call per request.
@@ -48,6 +50,14 @@ export default async function OrderPage({ params }: PageProps<"/admin/narudzbe/[
           {order.createdBy && ` · unos: ${order.createdBy.name}`}
         </p>
         <OrderActions order={order} role={user.role} />
+        {RETURNABLE_ORDER.includes(order.status) && canHandleReturns(user.role) && (
+          <Link
+            href={`/admin/povracaji/novi?narudzba=${order.id}`}
+            className={buttonVariants({ variant: "outline", className: "self-start" })}
+          >
+            Povraćaj robe
+          </Link>
+        )}
         {order.status === "PICKING" && (
           <p className="text-sm text-muted-foreground">Roba se priprema u skladištu skeniranjem (mobilno skladište).</p>
         )}

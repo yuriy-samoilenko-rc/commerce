@@ -39,6 +39,12 @@ export type ErrorCode =
   | 'SERIAL_ALREADY_COUNTED'
   | 'SERIAL_ELSEWHERE'
   | 'OUT_OF_COUNT_SCOPE'
+  | 'ORDER_NOT_RETURNABLE'
+  | 'RETURN_WRONG_STATE'
+  | 'RETURN_QTY_EXCEEDED'
+  | 'RETURN_PERIOD_PASSED'
+  | 'RETURN_UNDECIDED'
+  | 'RETURN_UNITS_CHANGED'
   | 'DOCUMENT_EMPTY';
 
 export type ErrorParams = Record<string, string | number>;

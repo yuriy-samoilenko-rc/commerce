@@ -1,10 +1,10 @@
 import {
   BadRequestException,
-  ConflictException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
 import { formatReturnNumber } from '../common/document-numbers';
+import { badRequest, conflict } from '../common/errors';
 import {
   pageArgs,
   PaginationQueryDto,
@@ -129,8 +129,10 @@ export class ReturnsService {
         select: { status: true, deliveredAt: true },
       });
       if (!RETURNABLE_ORDER.includes(order.status)) {
-        throw new ConflictException(
+        throw conflict(
+          'ORDER_NOT_RETURNABLE',
           `Order is ${order.status}; only delivered orders can be returned`,
+          { status: order.status },
         );
       }
       const productOf = await this.validateLines(
@@ -174,7 +176,10 @@ export class ReturnsService {
         select: { isActive: true },
       });
       if (!warehouse?.isActive)
-        throw new BadRequestException('Warehouse not found or inactive');
+        throw badRequest(
+          'WAREHOUSE_INACTIVE',
+          'Warehouse not found or inactive',
+        );
       await this.transition(
         tx,
         id,
@@ -199,7 +204,8 @@ export class ReturnsService {
           data: { status: SerialUnitStatus.RETURNED, warehouseId },
         });
         if (count !== item.serialNumbers.length) {
-          throw new ConflictException(
+          throw conflict(
+            'RETURN_UNITS_CHANGED',
             'Some returned units are no longer in the SOLD state, check the serial numbers',
           );
         }
@@ -250,7 +256,10 @@ export class ReturnsService {
         ret.status === ReturnStatus.RECEIVED &&
         lines.some((l) => !l.decision)
       ) {
-        throw new ConflictException('Decide every line before approving');
+        throw conflict(
+          'RETURN_UNDECIDED',
+          'Decide every line before approving',
+        );
       }
       const accepted = lines.filter(
         (l) => l.decision !== ReturnDecision.REJECT,
@@ -330,7 +339,8 @@ export class ReturnsService {
       });
       if (!ret) throw new NotFoundException('Return not found');
       if (ret.order.paymentStatus !== PaymentStatus.PAID) {
-        throw new ConflictException(
+        throw conflict(
+          'ORDER_NOT_PAID',
           'The order was never paid, there is nothing to refund',
         );
       }
@@ -393,34 +403,33 @@ export class ReturnsService {
     return { ...r, number: formatReturnNumber(r.number) };
   }
 
+  // Two queries rather than one generic helper: each list keeps the type of its own select.
   async listForStaff(q: ReturnQueryDto) {
-    return this.list({ status: q.status, orderId: q.orderId }, q, staffSelect);
-  }
-
-  async listForCustomer(userId: string, q: PaginationQueryDto) {
-    return this.list({ order: { userId } }, q, baseSelect);
-  }
-
-  private async list(
-    where: Prisma.ReturnWhereInput,
-    q: PaginationQueryDto,
-    select: typeof baseSelect,
-  ) {
+    const where = { status: q.status, orderId: q.orderId };
     const [rows, total] = await this.prisma.$transaction([
       this.prisma.return.findMany({
         where,
-        select,
+        select: staffSelect,
         orderBy: { number: 'desc' },
         ...pageArgs(q),
       }),
       this.prisma.return.count({ where }),
     ]);
-    return {
-      items: rows.map((r) => ({ ...r, number: formatReturnNumber(r.number) })),
-      total,
-      page: q.page,
-      limit: q.limit,
-    };
+    return paged(rows, total, q);
+  }
+
+  async listForCustomer(userId: string, q: PaginationQueryDto) {
+    const where = { order: { userId } };
+    const [rows, total] = await this.prisma.$transaction([
+      this.prisma.return.findMany({
+        where,
+        select: baseSelect,
+        orderBy: { number: 'desc' },
+        ...pageArgs(q),
+      }),
+      this.prisma.return.count({ where }),
+    ]);
+    return paged(rows, total, q);
   }
 
   // ---------- helpers ----------
@@ -465,8 +474,10 @@ export class ReturnsService {
       const already = claimed.filter((c) => c.orderItemId === oi.id);
       const left = oi.quantity - already.reduce((s, c) => s + c.quantity, 0);
       if (line.quantity > left) {
-        throw new ConflictException(
+        throw conflict(
+          'RETURN_QTY_EXCEEDED',
           `Only ${left} of "${oi.productName}" can still be returned`,
+          { product: oi.productName, left },
         );
       }
 
@@ -476,8 +487,10 @@ export class ReturnsService {
           !deliveredAt ||
           Date.now() - deliveredAt.getTime() > days * 86_400_000
         ) {
-          throw new ConflictException(
+          throw conflict(
+            'RETURN_PERIOD_PASSED',
             `The ${days}-day return period for "${oi.productName}" has passed; defects are handled under warranty`,
+            { product: oi.productName, days },
           );
         }
       }
@@ -485,8 +498,10 @@ export class ReturnsService {
       const serials = cleanSerials(line.serialNumbers);
       if (!oi.product.trackSerial) {
         if (serials.length)
-          throw new BadRequestException(
+          throw badRequest(
+            'SERIALS_NOT_TRACKED',
             `"${oi.productName}" is not tracked by serial number`,
+            { product: oi.productName },
           );
         continue;
       }
@@ -494,8 +509,14 @@ export class ReturnsService {
         serials.length !== line.quantity ||
         new Set(serials).size !== serials.length
       ) {
-        throw new BadRequestException(
+        throw badRequest(
+          'SERIALS_COUNT_MISMATCH',
           `"${oi.productName}": list exactly ${line.quantity} distinct serial numbers`,
+          {
+            product: oi.productName,
+            expected: line.quantity,
+            got: serials.length,
+          },
         );
       }
       const inReturn = new Set(already.flatMap((c) => c.serialNumbers));
@@ -511,8 +532,10 @@ export class ReturnsService {
         (sn) => inReturn.has(sn) || !sold.some((u) => u.serialNumber === sn),
       );
       if (bad.length) {
-        throw new BadRequestException(
+        throw badRequest(
+          'SERIALS_UNAVAILABLE',
           `Not sold in this order line or already being returned: ${bad.join(', ')}`,
+          { serials: bad.join(', ') },
         );
       }
     }
@@ -594,8 +617,23 @@ export class ReturnsService {
       select: { status: true },
     });
     if (!r) throw new NotFoundException('Return not found');
-    throw new ConflictException(
+    throw conflict(
+      'RETURN_WRONG_STATE',
       `Return is ${r.status} and cannot be ${action}`,
+      { status: r.status },
     );
   }
+}
+
+function paged<T extends { number: number }>(
+  rows: T[],
+  total: number,
+  q: PaginationQueryDto,
+) {
+  return {
+    items: rows.map((r) => ({ ...r, number: formatReturnNumber(r.number) })),
+    total,
+    page: q.page,
+    limit: q.limit,
+  };
 }
