@@ -25,3 +25,7 @@ Thumbs.db
 backend/src/generated/
 
 # Docker volumes are managed by Docker itself, nothing to ignore here
+
+# Uploaded media (product photos): content, not code
+backend/uploads/
+backend/uploads-e2e/

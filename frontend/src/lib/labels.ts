@@ -67,6 +67,11 @@ export const DOCUMENT_TYPE: Record<string, string> = {
   INVENTORY_ACT: "Popisna lista",
 };
 
+export const DOCUMENT_STATUS: Record<string, string> = {
+  ISSUED: "Važeći",
+  CANCELLED: "Stornirani",
+};
+
 export const RECEIVING_STATUS: Record<string, string> = {
   DRAFT: "Nacrt",
   CONFIRMED: "Potvrđen",
@@ -148,3 +153,9 @@ export const MOVEMENT_TYPE: Record<string, string> = {
 
 export const STAFF_ROLES: Role[] = ["ADMIN", "MANAGER", "WAREHOUSE", "ACCOUNTANT"];
 export const FINANCE_ROLES: Role[] = ["ADMIN", "MANAGER", "ACCOUNTANT"];
+
+export const REVIEW_STATUS: Record<"PENDING" | "APPROVED" | "REJECTED", string> = {
+  PENDING: "Čeka provjeru",
+  APPROVED: "Objavljena",
+  REJECTED: "Odbijena",
+};

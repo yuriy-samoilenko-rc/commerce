@@ -1,5 +1,6 @@
-import { Plus } from "lucide-react";
+import { ImageOff, Plus } from "lucide-react";
 import type { Metadata } from "next";
+import Image from "next/image";
 import Link from "next/link";
 import { DataTable } from "@/components/admin/data-table";
 import { FilterSelect, pickParam } from "@/components/admin/filter-select";
@@ -89,19 +90,26 @@ export default async function ProductsPage({ searchParams }: PageProps<"/admin/p
       <Card>
         <CardContent className="flex flex-col gap-3">
           <DataTable
-            head={["Proizvod", "Kategorija", "Cijena", "Na stanju", "Rezervisano", "Dostupno", "Status"]}
-            align={[2, 3, 4, 5]}
-            minWidth="52rem"
+            head={["Šifra", "Proizvod", "Kategorija", "Cijena", "Na stanju", "Rezervisano", "Dostupno", "Status"]}
+            align={[3, 4, 5, 6]}
+            minWidth="64rem"
             empty="Nema proizvoda koji odgovaraju filterima."
             rows={data.items.map((p) => [
-              <div key="n" className="flex flex-col">
-                <Link href={`/admin/proizvodi/${p.id}`} className="font-medium underline-offset-4 hover:underline">
-                  {p.name}
-                </Link>
-                <span className="text-xs text-muted-foreground">
-                  {p.sku}
-                  {p.brand && ` · ${p.brand.name}`}
-                </span>
+              <span key="s" className="font-mono text-xs whitespace-nowrap">{p.sku}</span>,
+              <div key="n" className="flex items-center gap-3">
+                <div className="relative flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-md border bg-muted">
+                  {p.images[0] ? (
+                    <Image src={p.images[0].thumbUrl} alt="" fill unoptimized sizes="40px" className="object-contain" />
+                  ) : (
+                    <ImageOff className="size-4 text-muted-foreground" aria-label="Bez slike" />
+                  )}
+                </div>
+                <div className="flex flex-col">
+                  <Link href={`/admin/proizvodi/${p.id}`} className="font-medium underline-offset-4 hover:underline">
+                    {p.name}
+                  </Link>
+                  {p.brand && <span className="text-xs text-muted-foreground">{p.brand.name}</span>}
+                </div>
               </div>,
               p.category.name,
               <div key="p" className="flex flex-col items-end">
@@ -111,7 +119,7 @@ export default async function ProductsPage({ searchParams }: PageProps<"/admin/p
               count(p.stock.quantity),
               count(p.stock.reserved),
               count(p.stock.available),
-              <StockBadge key="s" alert={p.stockAlert} archived={p.isArchived} />,
+              <StockBadge key="s" alert={p.stockAlert} archived={p.isArchived} available={p.stock.available} />,
             ])}
           />
           <Pager path="/admin/proizvodi" params={filters} page={page} limit={LIMIT} total={data.total} />

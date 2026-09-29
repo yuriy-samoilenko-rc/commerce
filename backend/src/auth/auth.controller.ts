@@ -4,6 +4,7 @@ import {
   Get,
   HttpCode,
   HttpStatus,
+  Patch,
   Post,
 } from '@nestjs/common';
 import { SkipAudit } from '../audit/skip-audit.decorator';
@@ -12,6 +13,7 @@ import { AuthService } from './auth.service';
 import { CurrentUser } from './decorators/current-user.decorator';
 import { Public } from './decorators/public.decorator';
 import { LoginDto } from './dto/login.dto';
+import { ChangePasswordDto, UpdateProfileDto } from './dto/profile.dto';
 import { RegisterDto } from './dto/register.dto';
 
 // AuthService writes precise entries itself (and must never log the password).
@@ -36,5 +38,19 @@ export class AuthController {
   @Get('me')
   me(@CurrentUser() user: PublicUser) {
     return user;
+  }
+
+  @Patch('me')
+  updateMe(@Body() dto: UpdateProfileDto, @CurrentUser() user: PublicUser) {
+    return this.authService.updateProfile(user.id, dto);
+  }
+
+  @Post('password')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  changePassword(
+    @Body() dto: ChangePasswordDto,
+    @CurrentUser() user: PublicUser,
+  ) {
+    return this.authService.changePassword(user.id, dto);
   }
 }

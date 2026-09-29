@@ -1,6 +1,6 @@
 "use client";
 
-import { ClipboardCheck, LayoutDashboard, RotateCcw, ShieldCheck, Smartphone, Package, PackagePlus, ShoppingCart, Truck, Warehouse, type LucideIcon } from "lucide-react";
+import { ClipboardCheck, FileText, LayoutDashboard, Settings, Star, Store, RotateCcw, ShieldCheck, Smartphone, Package, PackagePlus, ShoppingCart, Truck, Warehouse, type LucideIcon } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { Role } from "@/lib/backend-types";
@@ -25,6 +25,10 @@ const NAV: NavItem[] = [
   { href: "/admin/prijem", label: "Prijem robe", icon: PackagePlus },
   { href: "/admin/prenos", label: "Prenos robe", icon: Truck },
   { href: "/admin/popis", label: "Popis", icon: ClipboardCheck },
+  { href: "/admin/dokumenti", label: "Dokumenti", icon: FileText },
+  { href: "/admin/ocjene", label: "Ocjene kupaca", icon: Star, roles: ["ADMIN", "MANAGER"] },
+  { href: "/admin/podesavanja", label: "Podešavanja", icon: Settings, roles: ["ADMIN"] },
+  { href: "/", label: "Internet prodavnica", icon: Store },
   // The phone app for scanning; admins, managers and storekeepers work in the warehouse.
   { href: "/m", label: "Mobilno skladište", icon: Smartphone, roles: ["ADMIN", "MANAGER", "WAREHOUSE"] },
 ];
@@ -34,7 +38,7 @@ export function SidebarNav({ role, onNavigate }: { role: Role; onNavigate?: () =
   return (
     <nav aria-label="Glavni meni" className="flex flex-col gap-0.5 p-2">
       {NAV.filter((item) => !item.roles || item.roles.includes(role)).map((item) => {
-        const active = item.href === "/admin" ? pathname === "/admin" : pathname.startsWith(item.href);
+        const active = item.href === "/admin" || item.href === "/" ? pathname === item.href : pathname.startsWith(item.href);
         return (
           <Link
             key={item.href}

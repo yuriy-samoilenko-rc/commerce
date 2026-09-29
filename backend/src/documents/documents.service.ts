@@ -1,12 +1,12 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { localYear } from '../common/timezone';
-import { Type } from 'class-transformer';
+import { addDays, localDayStart, localYear } from '../common/timezone';
 import {
-  IsDate,
   IsEnum,
+  IsIn,
   IsOptional,
   IsString,
   IsUUID,
+  Matches,
   MaxLength,
 } from 'class-validator';
 import {
@@ -34,6 +34,17 @@ import {
 import { DocumentData, NUMBER_PREFIX } from './document-data';
 import { renderPdf } from './pdf-renderer';
 
+const DAY = /^\d{4}-\d{2}-\d{2}$/;
+export const DOCUMENT_SORTS = [
+  'issuedAt',
+  'number',
+  'type',
+  'warehouse',
+  'partner',
+  'total',
+] as const;
+export type DocumentSort = (typeof DOCUMENT_SORTS)[number];
+
 export class DocumentQueryDto extends PaginationQueryDto {
   @IsOptional() @IsEnum(DocumentType) type?: DocumentType;
   @IsOptional() @IsEnum(DocumentStatus) status?: DocumentStatus;
@@ -47,8 +58,30 @@ export class DocumentQueryDto extends PaginationQueryDto {
   @IsOptional() @IsUUID() customerId?: string;
   /** Document number or counterparty name */
   @IsOptional() @IsString() @MaxLength(100) search?: string;
-  @IsOptional() @Type(() => Date) @IsDate() from?: Date;
-  @IsOptional() @Type(() => Date) @IsDate() to?: Date;
+  /** Exactly this counterparty (customer, supplier, receiving warehouse). */
+  @IsOptional() @IsString() @MaxLength(200) partner?: string;
+  /** First and last day, YYYY-MM-DD in local time, both inclusive. */
+  @IsOptional() @Matches(DAY) from?: string;
+  @IsOptional() @Matches(DAY) to?: string;
+  @IsOptional() @IsIn(DOCUMENT_SORTS) sort: DocumentSort = 'issuedAt';
+  @IsOptional() @IsIn(['asc', 'desc']) dir: 'asc' | 'desc' = 'desc';
+}
+
+function documentOrder(
+  sort: DocumentSort,
+  dir: 'asc' | 'desc',
+): Prisma.DocumentOrderByWithRelationInput[] {
+  const by: Record<DocumentSort, Prisma.DocumentOrderByWithRelationInput> = {
+    issuedAt: { issuedAt: dir },
+    // Numbers are PREFIX-YEAR-000001: as text they group by type, then year and sequence.
+    number: { number: dir },
+    type: { type: dir },
+    warehouse: { warehouse: { name: dir } },
+    partner: { counterpartyName: { sort: dir, nulls: 'last' } },
+    total: { total: { sort: dir, nulls: 'last' } },
+  };
+  // Ties: newest first, then a stable key so pages never overlap.
+  return [by[sort], { issuedAt: 'desc' }, { id: 'asc' }];
 }
 
 const listSelect = {
@@ -68,6 +101,9 @@ const listSelect = {
   transferId: true,
   returnId: true,
   inventoryCountId: true,
+  warehouse: { select: { id: true, name: true } },
+  // A transfer note concerns two warehouses; `warehouse` is the sending one.
+  transfer: { select: { toWarehouse: { select: { id: true, name: true } } } },
   createdBy: { select: { id: true, name: true } },
 } satisfies Prisma.DocumentSelect;
 
@@ -162,22 +198,43 @@ export class DocumentsService {
       returnId: q.returnId,
       inventoryCountId: q.inventoryCountId,
       supplierId: q.supplierId,
-      warehouseId: q.warehouseId,
       customerId: onlyCustomerId ?? q.customerId,
-      issuedAt: q.from || q.to ? { gte: q.from, lte: q.to } : undefined,
+      counterpartyName: q.partner
+        ? { equals: q.partner, mode: 'insensitive' }
+        : undefined,
+      issuedAt:
+        q.from || q.to
+          ? {
+              gte: q.from ? localDayStart(q.from) : undefined,
+              lt: q.to ? localDayStart(addDays(q.to, 1)) : undefined,
+            }
+          : undefined,
     };
+    const and: Prisma.DocumentWhereInput[] = [];
+    if (q.warehouseId) {
+      // Transfer notes belong to the receiving warehouse as well.
+      and.push({
+        OR: [
+          { warehouseId: q.warehouseId },
+          { transfer: { toWarehouseId: q.warehouseId } },
+        ],
+      });
+    }
     const search = q.search?.trim();
     if (search) {
-      where.OR = [
-        { number: { contains: search, mode: 'insensitive' } },
-        { counterpartyName: { contains: search, mode: 'insensitive' } },
-      ];
+      and.push({
+        OR: [
+          { number: { contains: search, mode: 'insensitive' } },
+          { counterpartyName: { contains: search, mode: 'insensitive' } },
+        ],
+      });
     }
+    if (and.length) where.AND = and;
     const [items, total] = await this.prisma.$transaction([
       this.prisma.document.findMany({
         where,
         select: listSelect,
-        orderBy: { issuedAt: 'desc' },
+        orderBy: documentOrder(q.sort, q.dir),
         ...pageArgs(q),
       }),
       this.prisma.document.count({ where }),

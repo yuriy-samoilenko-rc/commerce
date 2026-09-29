@@ -8,7 +8,8 @@ export function DataTable({
   align,
   minWidth,
 }: {
-  head: string[];
+  /** Column titles; a cell may be a link, e.g. a sort toggle. */
+  head: React.ReactNode[];
   rows: React.ReactNode[][];
   empty: string;
   /** Column indexes to right-align (amounts, quantities). */
@@ -24,7 +25,7 @@ export function DataTable({
         <thead>
           <tr className="border-b text-left text-xs text-muted-foreground">
             {head.map((h, i) => (
-              <th key={h} className={cn("px-2 py-2 font-medium whitespace-nowrap", right(i))}>
+              <th key={i} className={cn("px-2 py-2 font-medium whitespace-nowrap", right(i))}>
                 {h}
               </th>
             ))}

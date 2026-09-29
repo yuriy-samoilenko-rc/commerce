@@ -43,6 +43,22 @@ export class UpdateCompanySettingsDto {
   @Min(0)
   @Max(100_000)
   lowStockThreshold?: number;
+
+  /** Courier delivery price. */
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  @Max(10_000)
+  courierFee?: number;
+
+  /** Courier delivery is free from this order value (goods only); null = never free. */
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  @Max(1_000_000)
+  freeShippingFrom?: number | null;
 }
 
 const ID = 1;

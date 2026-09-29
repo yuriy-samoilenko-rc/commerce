@@ -11,6 +11,7 @@ import { MOVEMENT_TYPE } from "@/lib/labels";
 import { apiServer, requireUser } from "@/lib/session";
 import { loadProduct } from "../data";
 import { ArchiveButton } from "./archive-button";
+import { ProductImages } from "./product-images";
 
 export async function generateMetadata({ params }: PageProps<"/admin/proizvodi/[id]">): Promise<Metadata> {
   const { id } = await params;
@@ -54,7 +55,7 @@ export default async function ProductPage({ params }: PageProps<"/admin/proizvod
         <div className="flex flex-col gap-1">
           <div className="flex flex-wrap items-center gap-3">
             <h1 className="text-2xl font-semibold">{product.name}</h1>
-            <StockBadge alert={product.stockAlert} archived={product.isArchived} />
+            <StockBadge alert={product.stockAlert} archived={product.isArchived} available={product.stock.available} />
           </div>
           <p className="text-sm text-muted-foreground">
             {product.sku} · {product.category.name}
@@ -80,6 +81,32 @@ export default async function ProductPage({ params }: PageProps<"/admin/proizvod
 
       <div className="grid items-start gap-4 xl:grid-cols-3">
         <div className="flex min-w-0 flex-col gap-4 xl:col-span-2">
+          <ProductImages
+            productId={id}
+            productName={product.name}
+            initial={product.images}
+            canEdit={user.role === "ADMIN"}
+          />
+
+          {(product.description || attributes.length > 0) && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Opis i karakteristike</CardTitle>
+              </CardHeader>
+              <CardContent className="flex flex-col gap-4 text-sm">
+                {product.description && <p className="whitespace-pre-line">{product.description}</p>}
+                {attributes.length > 0 && (
+                  <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1">
+                    {attributes.map(([k, v]) => [
+                      <dt key={`${k}-t`} className="text-muted-foreground">{k}</dt>,
+                      <dd key={`${k}-d`}>{typeof v === "string" ? v : JSON.stringify(v)}</dd>,
+                    ])}
+                  </dl>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
           <Card>
             <CardHeader>
               <CardTitle>Zaliha po skladištima</CardTitle>
@@ -126,25 +153,6 @@ export default async function ProductPage({ params }: PageProps<"/admin/proizvod
               />
             </CardContent>
           </Card>
-
-          {(product.description || attributes.length > 0) && (
-            <Card>
-              <CardHeader>
-                <CardTitle>Opis i karakteristike</CardTitle>
-              </CardHeader>
-              <CardContent className="flex flex-col gap-4 text-sm">
-                {product.description && <p className="whitespace-pre-line">{product.description}</p>}
-                {attributes.length > 0 && (
-                  <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1">
-                    {attributes.map(([k, v]) => [
-                      <dt key={`${k}-t`} className="text-muted-foreground">{k}</dt>,
-                      <dd key={`${k}-d`}>{typeof v === "string" ? v : JSON.stringify(v)}</dd>,
-                    ])}
-                  </dl>
-                )}
-              </CardContent>
-            </Card>
-          )}
         </div>
 
         <div className="flex min-w-0 flex-col gap-4">
@@ -157,6 +165,7 @@ export default async function ProductPage({ params }: PageProps<"/admin/proizvod
                 rows={[
                   ["Prodajna", money(product.sellingPrice)],
                   product.discountPrice && ["Akcijska", money(product.discountPrice)],
+                  product.discountEndsAt && ["Akcija važi do", dateTime(product.discountEndsAt)],
                   ["PDV", `${Number(product.vatPercent)}%`],
                   cost !== null && ["Nabavna", money(cost)],
                   margin !== null && ["Marža (bez PDV-a)", `${margin.toLocaleString("sr-Latn-ME")}%`],
@@ -178,6 +187,7 @@ export default async function ProductPage({ params }: PageProps<"/admin/proizvod
                   product.weightKg && ["Težina", `${Number(product.weightKg).toLocaleString("sr-Latn-ME")} kg`],
                   ["Serijski brojevi", product.trackSerial ? "Da, po komadu" : "Ne"],
                   ["Prag „malo robe“", product.lowStockThreshold ?? "opšti iz podešavanja"],
+                  product.ratingCount > 0 && ["Ocjena kupaca", `${Number(product.ratingAvg).toLocaleString("sr-Latn-ME")} (${product.ratingCount})`],
                   ["Izmijenjen", dateTime(product.updatedAt)],
                 ]}
               />

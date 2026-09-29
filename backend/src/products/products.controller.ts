@@ -18,4 +18,9 @@ export class ProductsController {
   findOne(@Param('id', ParseUUIDPipe) id: string) {
     return this.products.findPublic(id);
   }
+
+  @Get(':id/recommendations')
+  recommendations(@Param('id', ParseUUIDPipe) id: string) {
+    return this.products.recommendations(id);
+  }
 }

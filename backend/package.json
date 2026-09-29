@@ -6,6 +6,7 @@
   "private": true,
   "license": "UNLICENSED",
   "scripts": {
+    "demo:data": "node --env-file=.env scripts/demo-data.mjs",
     "build": "nest build",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
     "start": "nest start",
@@ -17,7 +18,10 @@
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
-    "test:e2e": "jest --config ./test/jest-e2e.json"
+    "test:e2e": "jest --config ./test/jest-e2e.json",
+    "demo:content": "node --env-file=.env scripts/demo-content.mjs",
+    "e2e:db": "node --env-file=.env scripts/e2e-db.mjs",
+    "demo:shop": "node --env-file=.env scripts/demo-shop.mjs"
   },
   "dependencies": {
     "@nestjs/common": "^10.0.0",
@@ -38,7 +42,8 @@
     "pdfkit": "0.17.2",
     "pg": "^8.23.0",
     "reflect-metadata": "^0.2.0",
-    "rxjs": "^7.8.1"
+    "rxjs": "^7.8.1",
+    "sharp": "0.35.4"
   },
   "devDependencies": {
     "@nestjs/cli": "^10.0.0",
@@ -46,6 +51,7 @@
     "@nestjs/testing": "^10.0.0",
     "@types/express": "^5.0.0",
     "@types/jest": "^29.5.2",
+    "@types/multer": "2.2.0",
     "@types/node": "^20.3.1",
     "@types/nodemailer": "8.0.2",
     "@types/pdfkit": "0.17.6",

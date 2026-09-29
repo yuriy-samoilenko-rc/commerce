@@ -52,7 +52,7 @@ const NOT_REJECTED: Prisma.ReturnItemWhereInput = {
   OR: [{ decision: null }, { decision: { not: ReturnDecision.REJECT } }],
 };
 
-const returnWindowDays = () => {
+export const returnWindowDays = () => {
   const days = Number(process.env.RETURN_WINDOW_DAYS);
   return Number.isFinite(days) && days > 0 ? days : 14;
 };

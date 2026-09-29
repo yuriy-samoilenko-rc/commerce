@@ -47,6 +47,8 @@ const schema = z
     purchasePrice: decimal(true, MAX_PRICE, 2),
     sellingPrice: decimal(true, MAX_PRICE, 2),
     discountPrice: decimal(false, MAX_PRICE, 2),
+    /** datetime-local text, the admin's local time; empty = sale without an end. */
+    discountEndsAt: z.string(),
     vatPercent: decimal(true, 100, 2),
     warrantyMonths: whole(600),
     weightKg: decimal(false, 9_999_999, 3),
@@ -60,7 +62,23 @@ const schema = z
       return discount === null || Number.isNaN(discount) || discount < (parseDecimal(v.sellingPrice) ?? 0);
     },
     { path: ["discountPrice"], message: "Akcijska cijena mora biti niža od prodajne." },
-  );
+  )
+  .refine((v) => !v.discountEndsAt || v.discountPrice.trim() !== "", {
+    path: ["discountEndsAt"],
+    message: "Kraj akcije se unosi samo uz akcijsku cijenu.",
+  })
+  .refine((v) => !v.discountEndsAt || new Date(v.discountEndsAt).getTime() > Date.now(), {
+    path: ["discountEndsAt"],
+    message: "Kraj akcije mora biti u budućnosti.",
+  });
+
+/** ISO instant → "YYYY-MM-DDTHH:mm" in local time, for a datetime-local field. */
+function localInput(iso?: string | null) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
 type Values = z.infer<typeof schema>;
 
 function initialValues(p?: ProductDetail): Values {
@@ -75,6 +93,7 @@ function initialValues(p?: ProductDetail): Values {
     purchasePrice: decimalInput(p?.purchasePrice),
     sellingPrice: decimalInput(p?.sellingPrice),
     discountPrice: decimalInput(p?.discountPrice),
+    discountEndsAt: localInput(p?.discountEndsAt),
     vatPercent: p ? decimalInput(p.vatPercent).replace(/,00$/, "") : "21",
     warrantyMonths: p?.warrantyMonths?.toString() ?? "",
     weightKg: p?.weightKg ? decimalInput(p.weightKg, 3).replace(/,?0+$/, "") : "",
@@ -102,6 +121,7 @@ function toPayload(v: Values) {
     purchasePrice: parseDecimal(v.purchasePrice),
     sellingPrice: parseDecimal(v.sellingPrice),
     discountPrice: parseDecimal(v.discountPrice),
+    discountEndsAt: v.discountEndsAt && v.discountPrice.trim() ? new Date(v.discountEndsAt).toISOString() : null,
     vatPercent: parseDecimal(v.vatPercent),
     warrantyMonths: int(v.warrantyMonths),
     weightKg: parseDecimal(v.weightKg),
@@ -219,6 +239,9 @@ export function ProductForm({
             </Field>
             <Field id="discountPrice" label="Akcijska cijena" error={err("discountPrice")}>
               <Input id="discountPrice" inputMode="decimal" {...register("discountPrice")} aria-invalid={!!errors.discountPrice} />
+            </Field>
+            <Field id="discountEndsAt" label="Akcija važi do" error={err("discountEndsAt")}>
+              <Input id="discountEndsAt" type="datetime-local" {...register("discountEndsAt")} aria-invalid={!!errors.discountEndsAt} />
             </Field>
           </CardContent>
         </Card>

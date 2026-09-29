@@ -60,6 +60,16 @@ export type ErrorCode =
   | 'SERIAL_ALREADY_PICKED'
   | 'SERIAL_PICKED_ELSEWHERE'
   | 'SERIAL_NOT_PICKED'
+  | 'NO_FILES'
+  | 'TOO_MANY_IMAGES'
+  | 'IMAGE_FORMAT'
+  | 'IMAGE_ORDER'
+  | 'NOT_A_PICKUP_POINT'
+  | 'SALE_END_WITHOUT_DISCOUNT'
+  | 'SALE_END_PAST'
+  | 'REVIEW_NOT_ALLOWED'
+  | 'REVIEW_EXISTS'
+  | 'WRONG_PASSWORD'
   | 'DOCUMENT_EMPTY';
 
 export type ErrorParams = Record<string, string | number>;

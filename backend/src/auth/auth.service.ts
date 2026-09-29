@@ -4,8 +4,14 @@ import * as bcrypt from 'bcryptjs';
 import { AuditService } from '../audit/audit.service';
 import { Role } from '../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { PublicUser, UsersService } from '../users/users.service';
+import { badRequest } from '../common/errors';
+import {
+  PublicUser,
+  publicUserSelect,
+  UsersService,
+} from '../users/users.service';
 import { LoginDto } from './dto/login.dto';
+import { ChangePasswordDto, UpdateProfileDto } from './dto/profile.dto';
 import { RegisterDto } from './dto/register.dto';
 import { JwtPayload } from './jwt-payload';
 
@@ -74,6 +80,43 @@ export class AuthService {
     const { passwordHash: _, ...rest } = user;
     const publicUser = { ...rest, lastLoginAt };
     return this.issueToken(publicUser);
+  }
+
+  /** A user edits their own name and, for customers, the contact data the shop prefills. */
+  updateProfile(userId: string, dto: UpdateProfileDto) {
+    return this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        name: dto.name?.trim(),
+        phone: dto.phone === undefined ? undefined : dto.phone?.trim() || null,
+        deliveryAddress:
+          dto.deliveryAddress === undefined
+            ? undefined
+            : dto.deliveryAddress?.trim() || null,
+      },
+      select: publicUserSelect,
+    });
+  }
+
+  async changePassword(userId: string, dto: ChangePasswordDto) {
+    const user = await this.prisma.user.findUniqueOrThrow({
+      where: { id: userId },
+      select: { passwordHash: true },
+    });
+    if (!(await bcrypt.compare(dto.currentPassword, user.passwordHash))) {
+      throw badRequest('WRONG_PASSWORD', 'The current password is wrong');
+    }
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { passwordHash: await bcrypt.hash(dto.newPassword, 12) },
+    });
+    await this.audit.write({
+      action: 'auth.password_changed',
+      entityType: 'users',
+      entityId: userId,
+      statusCode: 200,
+      userId,
+    });
   }
 
   private async issueToken(user: PublicUser) {

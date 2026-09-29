@@ -1,5 +1,7 @@
+import { Type } from 'class-transformer';
 import {
   IsBoolean,
+  IsDate,
   IsInt,
   IsNumber,
   IsObject,
@@ -64,6 +66,12 @@ export class CreateProductDto {
   @Min(0)
   @Max(MAX_PRICE)
   discountPrice?: number | null;
+
+  /** When the sale ends; null = no end date. Only meaningful with a discountPrice. */
+  @IsOptional()
+  @Type(() => Date)
+  @IsDate()
+  discountEndsAt?: Date | null;
 
   @IsOptional()
   @IsNumber(money)

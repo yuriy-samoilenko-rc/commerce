@@ -144,6 +144,7 @@ export default async function OrderPage({ params }: PageProps<"/admin/narudzbe/[
                 rows={[
                   ["Dostava", DELIVERY_METHOD[order.deliveryMethod]],
                   order.deliveryAddress && ["Adresa", order.deliveryAddress],
+                  order.pickupWarehouse && ["Preuzima u", order.pickupWarehouse.name],
                   ["Plaćanje", PAYMENT_METHOD[order.paymentMethod]],
                   order.paidAt && ["Plaćeno", dateTime(order.paidAt)],
                   order.reservationExpiresAt && ["Rezervacija do", dateTime(order.reservationExpiresAt)],

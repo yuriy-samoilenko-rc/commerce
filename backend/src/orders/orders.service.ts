@@ -33,7 +33,8 @@ import {
   OrderItemDto,
   OrderQueryDto,
 } from './dto/order.dto';
-import { DELIVERY_FEES, reservationTtlMs } from './order-settings';
+import { CompanySettingsService } from '../settings/company-settings.service';
+import { reservationTtlMs } from './order-settings';
 
 /** Not yet being picked: the customer may still cancel, and the reservation may expire. */
 export const EARLY = [OrderStatus.NEW, OrderStatus.CONFIRMED];
@@ -58,6 +59,7 @@ const orderFields = {
   customerPhone: true,
   customerEmail: true,
   deliveryAddress: true,
+  pickupWarehouse: { select: { id: true, name: true, address: true } },
   comment: true,
   subtotal: true,
   deliveryFee: true,
@@ -173,6 +175,7 @@ export class OrdersService {
     private readonly documents: DocumentsService,
     private readonly notifications: NotificationsService,
     private readonly mail: MailService,
+    private readonly settings: CompanySettingsService,
   ) {}
 
   // ---------- placing ----------
@@ -222,10 +225,12 @@ export class OrdersService {
           sku: true,
           sellingPrice: true,
           discountPrice: true,
+          discountEndsAt: true,
           vatPercent: true,
           isArchived: true,
         },
       });
+      const now = new Date();
       const byId = new Map(products.map((p) => [p.id, p]));
 
       const lines = items.map((item) => {
@@ -236,7 +241,10 @@ export class OrdersService {
             `Product ${item.productId} is not available`,
             { product: p?.name ?? item.productId },
           );
-        const unitPrice = p.discountPrice ?? p.sellingPrice;
+        // A sale that has just ended no longer counts, even before the shop catches up.
+        const onSale =
+          p.discountPrice && (!p.discountEndsAt || p.discountEndsAt > now);
+        const unitPrice = onSale ? p.discountPrice! : p.sellingPrice;
         return {
           productId: p.id,
           productName: p.name,
@@ -251,7 +259,15 @@ export class OrdersService {
         (sum, l) => sum.add(l.lineTotal),
         new Prisma.Decimal(0),
       );
-      const deliveryFee = new Prisma.Decimal(DELIVERY_FEES[dto.deliveryMethod]);
+      const deliveryFee = await this.deliveryFee(
+        tx,
+        dto.deliveryMethod,
+        subtotal,
+      );
+      const pickupWarehouseId =
+        dto.deliveryMethod === DeliveryMethod.PICKUP && dto.pickupWarehouseId
+          ? await this.assertPickupPoint(tx, dto.pickupWarehouseId)
+          : null;
 
       const order = await tx.order.create({
         data: {
@@ -267,6 +283,7 @@ export class OrdersService {
             dto.deliveryMethod === DeliveryMethod.COURIER
               ? dto.deliveryAddress
               : null,
+          pickupWarehouseId,
           comment: dto.comment ?? null,
           subtotal,
           deliveryFee,
@@ -297,6 +314,32 @@ export class OrdersService {
       await this.mail.orderEmail(tx, 'RECEIVED', order.id);
       return order.id;
     }, LONG_TX);
+  }
+
+  /** Courier costs the configured fee, nothing from the free-delivery threshold on. */
+  private async deliveryFee(
+    tx: Tx,
+    method: DeliveryMethod,
+    subtotal: Prisma.Decimal,
+  ) {
+    if (method === DeliveryMethod.PICKUP) return new Prisma.Decimal(0);
+    const { courierFee, freeShippingFrom } = await this.settings.get(tx);
+    return freeShippingFrom && subtotal.gte(freeShippingFrom)
+      ? new Prisma.Decimal(0)
+      : courierFee;
+  }
+
+  private async assertPickupPoint(tx: Tx, warehouseId: string) {
+    const point = await tx.warehouse.findFirst({
+      where: { id: warehouseId, isActive: true, isPickupPoint: true },
+      select: { id: true },
+    });
+    if (!point)
+      throw badRequest(
+        'NOT_A_PICKUP_POINT',
+        'Orders cannot be collected at this warehouse',
+      );
+    return point.id;
   }
 
   // ---------- lifecycle ----------

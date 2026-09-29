@@ -68,6 +68,12 @@ export class CheckoutDto {
   @MaxLength(300)
   deliveryAddress?: string;
 
+  /** Pickup: the store (a pickup-point warehouse) where the customer collects the order. */
+  @ValidateIf((o: CheckoutDto) => o.deliveryMethod === DeliveryMethod.PICKUP)
+  @IsOptional()
+  @IsUUID()
+  pickupWarehouseId?: string;
+
   @IsEnum(PaymentMethod)
   paymentMethod: PaymentMethod;
 

@@ -8,6 +8,10 @@ import { CategoriesModule } from './categories/categories.module';
 import { DocumentsModule } from './documents/documents.module';
 import { InventoryModule } from './inventory/inventory.module';
 import { MailModule } from './mail/mail.module';
+import { MediaModule } from './media/media.module';
+import { ReviewsModule } from './reviews/reviews.module';
+import { ShopModule } from './shop/shop.module';
+import { WishlistModule } from './wishlist/wishlist.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { OrdersModule } from './orders/orders.module';
 import { PrismaModule } from './prisma/prisma.module';
@@ -31,6 +35,7 @@ import { WarrantyModule } from './warranty/warranty.module';
     DocumentsModule,
     NotificationsModule,
     MailModule,
+    MediaModule,
     ReportsModule,
     UsersModule,
     AuthModule,
@@ -46,6 +51,9 @@ import { WarrantyModule } from './warranty/warranty.module';
     OrdersModule,
     ReturnsModule,
     WarrantyModule,
+    ShopModule,
+    ReviewsModule,
+    WishlistModule,
   ],
   controllers: [AppController],
   providers: [AppService],

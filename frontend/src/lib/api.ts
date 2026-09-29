@@ -83,6 +83,16 @@ const CODED: Record<string, (p: Params) => string> = {
   SERIAL_NOT_PICKED: (p) => `Serijski broj ${p.serial} nije spakovan za ovu narudžbu.`,
   REPLACEMENT_UNAVAILABLE: (p) =>
     `Serijski broj ${p.serial} nije slobodan komad proizvoda „${p.product}“ na polici izabranog skladišta.`,
+  NO_FILES: () => "Izaberite bar jednu sliku.",
+  TOO_MANY_IMAGES: (p) => `Proizvod može imati najviše ${p.max} slika; može se dodati još ${p.left}.`,
+  IMAGE_FORMAT: (p) => `„${p.file}“ nije slika u formatu JPEG, PNG ili WebP.`,
+  IMAGE_ORDER: () => "Slike su se u međuvremenu promijenile. Osvježite stranicu.",
+  NOT_A_PICKUP_POINT: () => "Na izabranom mjestu nije moguće preuzeti narudžbu. Izaberite drugu prodavnicu.",
+  SALE_END_WITHOUT_DISCOUNT: () => "Kraj akcije se unosi samo uz akcijsku cijenu.",
+  SALE_END_PAST: () => "Kraj akcije mora biti u budućnosti.",
+  REVIEW_NOT_ALLOWED: () => "Ocjenu mogu ostaviti samo kupci koji su ovaj proizvod primili.",
+  REVIEW_EXISTS: () => "Već ste ocijenili ovaj proizvod.",
+  WRONG_PASSWORD: () => "Trenutna lozinka nije ispravna.",
 };
 
 const FALLBACK: Record<number, string> = {
@@ -111,8 +121,11 @@ export async function api<T>(path: string, init: RequestInit & { json?: unknown 
 
   if (res.status === 401) {
     // A full reload on purpose: it drops every cached query of the expired session.
+    // Staff screens have their own login; everyone else is a shop customer.
+    const path = window.location.pathname;
+    const login = /^\/(admin|m)(\/|$)/.test(path) ? "/prijava" : "/nalog/prijava";
     // eslint-disable-next-line @next/next/no-location-assign-relative-destination
-    window.location.assign(`/prijava?next=${encodeURIComponent(window.location.pathname)}`);
+    window.location.assign(`${login}?next=${encodeURIComponent(path)}`);
     throw new ApiError(401, "Sesija je istekla.");
   }
   if (!res.ok) throw await toError(res);

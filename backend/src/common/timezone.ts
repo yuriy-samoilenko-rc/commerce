@@ -27,3 +27,30 @@ export function addDays(isoDate: string, days: number) {
   d.setUTCDate(d.getUTCDate() + days);
   return d.toISOString().slice(0, 10);
 }
+
+/** The instant a local calendar day (YYYY-MM-DD) begins in the business time zone. */
+export function localDayStart(isoDate: string) {
+  const utcMidnight = new Date(`${isoDate}T00:00:00Z`);
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: appTimezone(),
+    hourCycle: 'h23',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  }).formatToParts(utcMidnight);
+  const get = (type: string) =>
+    Number(parts.find((p) => p.type === type)!.value);
+  // Local wall clock at UTC midnight, minus UTC midnight = the zone's offset then.
+  const wall = Date.UTC(
+    get('year'),
+    get('month') - 1,
+    get('day'),
+    get('hour'),
+    get('minute'),
+    get('second'),
+  );
+  return new Date(utcMidnight.getTime() - (wall - utcMidnight.getTime()));
+}

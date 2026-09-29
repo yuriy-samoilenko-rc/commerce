@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { ADMIN, apiAsAdmin, createUser, expectPath, login, seedCatalog, seedProduct } from "./helpers";
+import { ADMIN, adminToken, API, apiAsAdmin, createUser, expectPath, login, seedCatalog, seedProduct } from "./helpers";
 
 test.describe("products in the back office", () => {
   test("an admin creates, edits, archives and restores a product", async ({ page }) => {
@@ -136,5 +136,113 @@ test.describe("products in the back office", () => {
     await expect(page.getByText("Nabavna")).toHaveCount(0);
     await page.goto(`/admin/proizvodi/${product.id}/uredi`);
     await expect(page.getByText("Katalog uređuje administrator.")).toBeVisible();
+  });
+});
+
+// Two tiny valid PNGs (40×30, red and blue) and a text file posing as a PNG.
+const RED = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAACgAAAAeCAIAAADRv8uKAAAACXBIWXMAAAPoAAAD6AG1e1JrAAAAO0lEQVRIie3VwQkAMAwDse50+4/iXTpG+xDkHwiOdVZP5licU0+48k4pkKnMIBEWw2JYHBbDYljcVyxeF8rqXGR1GogAAAAASUVORK5CYII=",
+  "base64",
+);
+const BLUE = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAACgAAAAeCAIAAADRv8uKAAAACXBIWXMAAAPoAAAD6AG1e1JrAAAAPUlEQVRIie3VQQ0AMAwCwHnCE2oRNRnb45L+mzSUO+mezLG4Th3hmneqAonKHCSKxWGxWAwWh8ViMV+xeAFhNonLul/1dAAAAABJRU5ErkJggg==",
+  "base64",
+);
+const png = (name: string, buffer: Buffer) => ({ name, mimeType: "image/png", buffer });
+
+test.describe("product photos", () => {
+  test("an admin uploads, orders, describes and deletes photos", async ({ page }) => {
+    const { product } = await seedProduct(1);
+    await login(page, ADMIN.email, ADMIN.password);
+    await expectPath(page, "/admin");
+    await page.goto(`/admin/proizvodi/${product.id}`);
+    const photos = page.getByRole("list", { name: "Slike proizvoda" });
+    await expect(page.getByText("Proizvod još nema slika.", { exact: false })).toBeVisible();
+
+    // The API decodes every file: a renamed text file is refused, and nothing is stored.
+    await page.getByLabel("Izaberite slike").setInputFiles([
+      png("crvena.png", RED),
+      { name: "lazna.png", mimeType: "image/png", buffer: Buffer.from("not an image") },
+    ]);
+    await expect(page.getByText("„lazna.png“ nije slika u formatu JPEG, PNG ili WebP.")).toBeVisible();
+    await expect(page.getByText("0 od 10", { exact: false })).toBeVisible();
+
+    await page.getByLabel("Izaberite slike").setInputFiles([png("crvena.png", RED), png("plava.png", BLUE)]);
+    await expect(page.getByText("Dodato je 2 slika.")).toBeVisible();
+    await expect(photos.getByRole("listitem")).toHaveCount(2);
+    await expect(photos.getByRole("listitem").first().getByText("Glavna")).toBeVisible();
+    const first = await photos.getByRole("img").first().getAttribute("src");
+    expect(first).toMatch(/^\/media\/products\/.+-400\.webp$/);
+    // Served from our own origin through the media route, as WebP.
+    const served = await page.request.get(first!);
+    expect(served.status()).toBe(200);
+    expect(served.headers()["content-type"]).toBe("image/webp");
+
+    // The second photo becomes the main one.
+    await photos.getByRole("listitem").nth(1).getByRole("button", { name: "Postavi kao glavnu" }).click();
+    await expect(page.getByText("Glavna slika je promijenjena.")).toBeVisible();
+    await expect(photos.getByRole("img").first()).not.toHaveAttribute("src", first!);
+    await expect(photos.getByRole("img").nth(1)).toHaveAttribute("src", first!);
+
+    await photos.getByRole("listitem").first().getByRole("button", { name: "Opis slike" }).click();
+    await page.getByLabel("Opis", { exact: true }).fill("Prednja strana");
+    await page.getByRole("button", { name: "Sačuvaj" }).click();
+    await expect(page.getByText("Opis slike je sačuvan.")).toBeVisible();
+    await expect(photos.getByRole("img", { name: "Prednja strana" })).toBeVisible();
+
+    // The list shows the main photo next to the name.
+    await page.goto(`/admin/proizvodi?search=${product.sku}`);
+    await expect(page.getByRole("row", { name: new RegExp(product.sku) }).locator("img")).toHaveAttribute(
+      "src",
+      /-400\.webp$/,
+    );
+
+    await page.goto(`/admin/proizvodi/${product.id}`);
+    await photos.getByRole("listitem").first().getByRole("button", { name: "Obriši sliku" }).click();
+    await page.getByRole("dialog").getByRole("button", { name: "Obriši sliku" }).click();
+    await expect(page.getByText("Slika je obrisana.")).toBeVisible();
+    await expect(photos.getByRole("listitem")).toHaveCount(1);
+    await expect(photos.getByRole("img").first()).toHaveAttribute("src", first!);
+    await expect(photos.getByText("Glavna")).toBeVisible();
+
+    // The shop sees the photos too, in the same order.
+    const shop = await page.request.get(`${API}/products/${product.id}`);
+    const body = (await shop.json()) as { images: { thumbUrl: string }[] };
+    expect(body.images.map((i) => i.thumbUrl)).toEqual([first]);
+  });
+
+  test("other staff see the photos but cannot change them", async ({ page }) => {
+    const { product } = await seedProduct(1);
+    const token = await adminToken();
+    const form = new FormData();
+    form.append("files", new Blob([RED], { type: "image/png" }), "crvena.png");
+    const upload = await fetch(`${API}/admin/products/${product.id}/images`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+      body: form,
+    });
+    expect(upload.status).toBe(201);
+
+    const manager = await createUser("MANAGER");
+    await login(page, manager.email, manager.password);
+    await expectPath(page, "/admin");
+    await page.goto(`/admin/proizvodi/${product.id}`);
+    await expect(page.getByRole("list", { name: "Slike proizvoda" }).getByRole("img")).toHaveCount(1);
+    await expect(page.getByRole("button", { name: "Dodaj slike" })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Obriši sliku" })).toHaveCount(0);
+
+    const images = (await (await fetch(`${API}/admin/products/${product.id}/images`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })).json()) as { id: string }[];
+    const managerToken = (await (await fetch(`${API}/auth/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: manager.email, password: manager.password }),
+    })).json()) as { accessToken: string };
+    const denied = await fetch(`${API}/admin/products/${product.id}/images/${images[0].id}`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${managerToken.accessToken}` },
+    });
+    expect(denied.status).toBe(403);
   });
 });
