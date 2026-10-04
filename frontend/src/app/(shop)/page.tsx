@@ -15,6 +15,7 @@ import { HeroCarousel } from "./hero-carousel";
 export const metadata: Metadata = {
   title: { absolute: "TechStore — tehnika za dom i posao" },
   description: "Televizori, telefoni, laptopovi i kućni aparati uz preuzimanje u prodavnici ili dostavu širom Crne Gore.",
+  alternates: { canonical: "/" },
 };
 
 function SectionHead({ title, href, link, children }: { title: string; href?: string; link?: string; children?: React.ReactNode }) {

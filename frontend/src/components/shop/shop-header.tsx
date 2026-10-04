@@ -59,12 +59,12 @@ export function ShopHeader({
 
   return (
     <header className="relative z-30 bg-white">
-      <div className="hidden h-9 items-center justify-between bg-shop-ink px-4 text-[13px] text-[#c9d6ec] md:flex lg:px-20">
-        <span>
+      <div className="hidden h-9 items-center justify-between gap-6 bg-shop-ink px-4 text-[13px] text-[#c9d6ec] md:flex lg:px-20">
+        <span className="min-w-0 truncate">
           {stores ? `Preuzimanje: ${stores} · ` : ""}Dostava kurirskom službom širom Crne Gore
           {free !== null ? ` · besplatno od ${money(free)}` : ""} · Plaćanje pouzećem ili na račun
         </span>
-        <span className="flex gap-6">
+        <span className="flex shrink-0 gap-6">
           {info?.phone && <a href={`tel:${info.phone.replace(/\s/g, "")}`} className="text-[#c9d6ec] hover:text-white">{info.phone}</a>}
           {info?.email && <a href={`mailto:${info.email}`} className="text-[#c9d6ec] hover:text-white">{info.email}</a>}
         </span>

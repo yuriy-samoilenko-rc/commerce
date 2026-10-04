@@ -1,6 +1,7 @@
 "use client";
 
 import { Eye, EyeOff } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useId, useState } from "react";
 import { toast } from "sonner";
@@ -117,6 +118,11 @@ export function AuthForm({ initial = "login", next }: { initial?: "login" | "reg
             </span>
           )}
         </div>
+        {mode === "login" && (
+          <Link href="/nalog/zaboravljena-lozinka" className="-mt-1 self-end text-sm font-semibold">
+            Zaboravili ste lozinku?
+          </Link>
+        )}
         {error && (
           <p role="alert" className="rounded-xl bg-shop-sale-tint p-3 text-sm font-semibold text-shop-sale-ink">
             {error}

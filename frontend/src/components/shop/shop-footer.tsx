@@ -52,9 +52,17 @@ export function ShopFooter({ info }: { info: ShopInfo | null }) {
         <span>
           © {year} {info?.name ?? "TechStore"}. Sve cijene su u eurima, sa PDV-om.
         </span>
-        <Link href="/prijava" className="text-[#9fb3d9] hover:text-white">
-          Za zaposlene
-        </Link>
+        <span className="flex flex-wrap gap-x-5 gap-y-1">
+          <Link href="/uslovi-koriscenja" className="text-[#9fb3d9] hover:text-white">
+            Uslovi korišćenja
+          </Link>
+          <Link href="/politika-privatnosti" className="text-[#9fb3d9] hover:text-white">
+            Politika privatnosti
+          </Link>
+          <Link href="/prijava" className="text-[#9fb3d9] hover:text-white">
+            Za zaposlene
+          </Link>
+        </span>
       </div>
     </footer>
   );

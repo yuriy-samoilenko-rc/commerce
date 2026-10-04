@@ -178,3 +178,17 @@ export function documentEmail(
     `u prilogu vam šaljemo dokument „${doc.title}” br. ${doc.number}.`,
   ]);
 }
+
+export function passwordReset(
+  company: CompanySettings,
+  user: { name: string },
+  link: string,
+  minutes: number,
+): EmailContent {
+  return wrap(company, 'Nova lozinka za vaš nalog', [
+    `Poštovani/a ${user.name},`,
+    'primili smo zahtjev za novu lozinku za vaš nalog u internet prodavnici. Novu lozinku postavljate na ovoj stranici:',
+    link,
+    `Link važi ${minutes} minuta i može se iskoristiti samo jednom. Ako niste tražili novu lozinku, zanemarite ovu poruku — vaša lozinka ostaje ista.`,
+  ]);
+}

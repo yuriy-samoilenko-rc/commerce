@@ -1,11 +1,11 @@
 import { Banknote, Check, ShieldCheck, Store, Truck } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, permanentRedirect } from "next/navigation";
 import { cache } from "react";
 import { PriceTag, SaleBadge, Stars } from "@/components/shop/bits";
 import { CountdownLine } from "@/components/shop/countdown";
-import { categoryHref } from "@/lib/shop-links";
+import { categoryHref, productHref } from "@/lib/shop-links";
 import { ProductCard } from "@/components/shop/product-card";
 import type { PublicProductDetail, Recommendations, ReviewEligibility, ReviewPage } from "@/lib/backend-types";
 import { date, money } from "@/lib/format";
@@ -15,9 +15,18 @@ import { priceOf } from "@/lib/shop-price";
 import { apiServer } from "@/lib/session";
 import { Bundle, BuyBox, Gallery, ReviewForm, StickyBuyBar } from "./product-parts";
 
-const loadProduct = cache(async (id: string) => {
-  if (!isUuid(id)) notFound();
-  const product = await publicApi<PublicProductDetail>(`/products/${id}`);
+/**
+ * By slug; an old address with the product id moves permanently to the slug one, so
+ * links and search results from before keep working.
+ */
+const loadProduct = cache(async (slug: string) => {
+  if (isUuid(slug)) {
+    const old = await publicApi<PublicProductDetail>(`/products/${slug}`);
+    if (old) permanentRedirect(productHref(old));
+    notFound();
+  }
+  if (!/^[a-z0-9-]{1,200}$/.test(slug)) notFound();
+  const product = await publicApi<PublicProductDetail>(`/products/by-slug/${slug}`);
   if (!product) notFound();
   return product;
 });
@@ -27,19 +36,25 @@ const months = (n: number) =>
   `${n} ${n % 10 === 1 && n % 100 !== 11 ? "mjesec" : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 12 || n % 100 > 14) ? "mjeseca" : "mjeseci"}`;
 const reviewsWord = (n: number) => (n % 10 === 1 && n % 100 !== 11 ? "ocjena" : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 12 || n % 100 > 14) ? "ocjene" : "ocjena");
 
-export async function generateMetadata({ params }: PageProps<"/proizvod/[id]">): Promise<Metadata> {
-  const product = await loadProduct((await params).id);
+export async function generateMetadata({ params }: PageProps<"/proizvod/[slug]">): Promise<Metadata> {
+  const product = await loadProduct((await params).slug);
   const image = product.images[0];
   return {
     title: product.name,
     description: product.description?.split("\n")[0] ?? `${product.name} — ${money(product.shopPrice)}`,
-    openGraph: image ? { images: [{ url: image.url, width: image.width, height: image.height }] } : undefined,
+    alternates: { canonical: productHref(product) },
+    openGraph: {
+      type: "website",
+      title: `${product.name} — ${money(product.shopPrice)}`,
+      url: productHref(product),
+      images: image ? [{ url: image.url, width: image.width, height: image.height, alt: image.alt ?? product.name }] : undefined,
+    },
   };
 }
 
-export default async function ProductPage({ params }: PageProps<"/proizvod/[id]">) {
-  const { id } = await params;
-  const product = await loadProduct(id);
+export default async function ProductPage({ params }: PageProps<"/proizvod/[slug]">) {
+  const product = await loadProduct((await params).slug);
+  const id = product.id;
   const [recs, reviews, info, categories, customer] = await Promise.all([
     publicApi<Recommendations>(`/products/${id}/recommendations`),
     publicApi<ReviewPage>(`/products/${id}/reviews?limit=5`),

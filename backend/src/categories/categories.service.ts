@@ -5,6 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { AuditService, changedKeys } from '../audit/audit.service';
+import { uniqueSlug } from '../common/slug';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateCategoryDto } from './dto/create-category.dto';
 import { UpdateCategoryDto } from './dto/update-category.dto';
@@ -12,6 +13,7 @@ import { UpdateCategoryDto } from './dto/update-category.dto';
 export interface CategoryNode {
   id: string;
   name: string;
+  slug: string;
   parentId: string | null;
   children: CategoryNode[];
 }
@@ -27,7 +29,7 @@ export class CategoriesService {
   // built in memory from one query instead of recursive SQL.
   async findTree(): Promise<CategoryNode[]> {
     const rows = await this.prisma.category.findMany({
-      select: { id: true, name: true, parentId: true },
+      select: { id: true, name: true, slug: true, parentId: true },
       orderBy: { name: 'asc' },
     });
     const nodes = new Map<string, CategoryNode>(
@@ -56,8 +58,11 @@ export class CategoriesService {
     return category;
   }
 
-  create(dto: CreateCategoryDto) {
-    return this.prisma.category.create({ data: dto });
+  async create(dto: CreateCategoryDto) {
+    const slug = await uniqueSlug(dto.name, async (s) =>
+      Boolean(await this.prisma.category.findUnique({ where: { slug: s } })),
+    );
+    return this.prisma.category.create({ data: { ...dto, slug } });
   }
 
   async update(id: string, dto: UpdateCategoryDto) {

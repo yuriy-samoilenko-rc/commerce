@@ -3,6 +3,7 @@ import { AuditService, changedKeys } from '../audit/audit.service';
 import { CategoriesService } from '../categories/categories.service';
 import { pageArgs } from '../common/dto/pagination-query.dto';
 import { badRequest, conflict } from '../common/errors';
+import { uniqueSlug } from '../common/slug';
 import { Prisma, TransferStatus } from '../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateProductDto } from './dto/create-product.dto';
@@ -15,7 +16,7 @@ import { UpdateProductDto } from './dto/update-product.dto';
 import { imageSelect, presentImage } from './product-images.service';
 
 const relations = {
-  category: { select: { id: true, name: true } },
+  category: { select: { id: true, name: true, slug: true } },
   brand: { select: { id: true, name: true } },
 } satisfies Prisma.ProductSelect;
 
@@ -23,6 +24,7 @@ const relations = {
 const publicSelect = {
   id: true,
   name: true,
+  slug: true,
   sku: true,
   model: true,
   description: true,
@@ -241,6 +243,24 @@ export class ProductsService {
     };
   }
 
+  async findPublicBySlug(slug: string) {
+    const product = await this.prisma.product.findFirst({
+      where: { slug, isArchived: false },
+      select: publicSelect,
+    });
+    if (!product) throw new NotFoundException('Product not found');
+    return presentPublic(product);
+  }
+
+  /** Slugs of everything the shop sells, for the sitemap. */
+  async sitemap() {
+    return this.prisma.product.findMany({
+      where: { isArchived: false },
+      select: { slug: true, updatedAt: true },
+      orderBy: { slug: 'asc' },
+    });
+  }
+
   async findStaff(id: string, canSeeCost: boolean) {
     const product = await this.prisma.product.findUnique({
       where: { id },
@@ -264,9 +284,13 @@ export class ProductsService {
   async create(dto: CreateProductDto) {
     this.assertDiscountBelowPrice(dto.sellingPrice, dto.discountPrice);
     this.assertSaleEnd(dto.discountPrice, dto.discountEndsAt);
+    const slug = await uniqueSlug(dto.name, async (s) =>
+      Boolean(await this.prisma.product.findUnique({ where: { slug: s } })),
+    );
     const product = await this.prisma.product.create({
       data: {
         ...dto,
+        slug,
         discountEndsAt: dto.discountPrice == null ? null : dto.discountEndsAt,
         shopPrice: dto.discountPrice ?? dto.sellingPrice,
         attributes: dto.attributes as Prisma.InputJsonObject | undefined,

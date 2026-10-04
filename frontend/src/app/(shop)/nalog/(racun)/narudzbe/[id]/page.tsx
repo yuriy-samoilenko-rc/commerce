@@ -7,6 +7,7 @@ import { OrderTracker, StatusPill } from "@/components/shop/order-bits";
 import type { CustomerOrder } from "@/lib/backend-types";
 import { dateTime, money } from "@/lib/format";
 import { isUuid } from "@/lib/ids";
+import { productHref } from "@/lib/shop-links";
 import { DOCUMENT_TYPE, PAYMENT_METHOD, PAYMENT_STATUS } from "@/lib/labels";
 import { apiServer } from "@/lib/session";
 import { productPhotos } from "../../order-list";
@@ -69,7 +70,7 @@ export default async function OrderPage({ params, searchParams }: PageProps<"/na
                 </span>
                 <div className="flex min-w-0 grow flex-col gap-0.5">
                   {p ? (
-                    <Link href={`/proizvod/${i.productId}`} className="font-semibold text-shop-ink hover:text-shop-blue">
+                    <Link href={productHref(p)} className="font-semibold text-shop-ink hover:text-shop-blue">
                       {i.productName}
                     </Link>
                   ) : (

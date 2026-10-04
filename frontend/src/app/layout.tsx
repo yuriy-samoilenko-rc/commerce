@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { Providers } from "@/components/providers";
+import { siteUrl } from "@/lib/site";
 import "./globals.css";
 
 // latin-ext carries č, ć, đ, š, ž.
@@ -15,8 +16,11 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
+  // Relative canonical and preview URLs become absolute against the public address.
+  metadataBase: new URL(siteUrl()),
   title: { default: "TechStore", template: "%s · TechStore" },
   description: "Prodavnica tehnike",
+  openGraph: { siteName: "TechStore", locale: "sr_ME", type: "website" },
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

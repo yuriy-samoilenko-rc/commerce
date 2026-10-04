@@ -9,6 +9,7 @@ import { CompanySettingsService } from '../settings/company-settings.service';
 export interface ShopCategory {
   id: string;
   name: string;
+  slug: string;
   parentId: string | null;
   /** Products on sale in this category and all below it. */
   productCount: number;
@@ -108,7 +109,7 @@ export class ShopService {
   async categories(): Promise<ShopCategory[]> {
     const [rows, counts, pictured] = await Promise.all([
       this.prisma.category.findMany({
-        select: { id: true, name: true, parentId: true },
+        select: { id: true, name: true, slug: true, parentId: true },
         orderBy: { name: 'asc' },
       }),
       this.prisma.product.groupBy({

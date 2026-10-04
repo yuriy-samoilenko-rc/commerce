@@ -1,4 +1,9 @@
-import { CanActivate, ExecutionContext, Injectable, UnauthorizedException } from '@nestjs/common';
+import {
+  CanActivate,
+  ExecutionContext,
+  Injectable,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
 import { Request } from 'express';
@@ -35,11 +40,19 @@ export class JwtAuthGuard implements CanActivate {
 
     // Loading the user on every request makes deactivation and role changes take
     // effect immediately instead of waiting for the token to expire.
-    const user = await this.prisma.user.findUnique({
+    const found = await this.prisma.user.findUnique({
       where: { id: payload.sub },
-      select: publicUserSelect,
+      select: { ...publicUserSelect, passwordChangedAt: true },
     });
-    if (!user || !user.isActive) throw new UnauthorizedException();
+    if (!found || !found.isActive) throw new UnauthorizedException();
+    // A password reset ends every session that existed before it.
+    const { passwordChangedAt, ...user } = found;
+    if (
+      passwordChangedAt &&
+      (payload.iat ?? 0) * 1000 + 999 < passwordChangedAt.getTime()
+    ) {
+      throw new UnauthorizedException();
+    }
 
     request['user'] = user;
     return true;

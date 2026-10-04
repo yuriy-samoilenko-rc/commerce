@@ -70,6 +70,7 @@ export type ErrorCode =
   | 'REVIEW_NOT_ALLOWED'
   | 'REVIEW_EXISTS'
   | 'WRONG_PASSWORD'
+  | 'RESET_TOKEN_INVALID'
   | 'DOCUMENT_EMPTY';
 
 export type ErrorParams = Record<string, string | number>;

@@ -9,7 +9,7 @@ import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/
 import { api } from "@/lib/api";
 import type { Facets, PublicProductList, ShopCategory } from "@/lib/backend-types";
 import { money } from "@/lib/format";
-import { categoryHref } from "@/lib/shop-links";
+import { categoryHref, productHref } from "@/lib/shop-links";
 import { cartStore, useStore } from "@/lib/shop-store";
 import { cn } from "@/lib/utils";
 import { ProductPhoto } from "./bits";
@@ -157,7 +157,7 @@ export function MegaMenu({ categories }: { categories: ShopCategory[] }) {
                     {facets.data.brands.map((b) => (
                       <Link
                         key={b.id}
-                        href={`${categoryHref(cat)}&brend=${b.id}`}
+                        href={`${categoryHref(cat)}?brend=${b.id}`}
                         className="rounded-[10px] border border-shop-line px-3 py-2 text-sm font-semibold text-shop-ink hover:border-shop-blue"
                       >
                         {b.name}
@@ -176,7 +176,7 @@ export function MegaMenu({ categories }: { categories: ShopCategory[] }) {
                 {products.data?.items.map((p) => (
                   <Link
                     key={p.id}
-                    href={`/proizvod/${p.id}`}
+                    href={productHref(p)}
                     className="flex items-center gap-4 rounded-[18px] border border-shop-line p-3.5 transition hover:-translate-y-0.5 hover:border-[#9DB6E8] hover:shadow-lg"
                   >
                     <span className="relative size-28 shrink-0 overflow-hidden rounded-2xl bg-shop-ground">

@@ -1,4 +1,5 @@
 import {
+  IsEmail,
   IsOptional,
   IsString,
   Matches,
@@ -24,6 +25,24 @@ export class UpdateProfileDto {
   @IsString()
   @MaxLength(300)
   deliveryAddress?: string | null;
+}
+
+export class ForgotPasswordDto {
+  @IsEmail()
+  @MaxLength(200)
+  email: string;
+}
+
+export class ResetPasswordDto {
+  @IsString()
+  @MinLength(20)
+  @MaxLength(200)
+  token: string;
+
+  @IsString()
+  @MinLength(8)
+  @MaxLength(72)
+  password: string;
 }
 
 export class ChangePasswordDto {

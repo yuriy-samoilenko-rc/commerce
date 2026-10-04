@@ -93,6 +93,7 @@ const CODED: Record<string, (p: Params) => string> = {
   REVIEW_NOT_ALLOWED: () => "Ocjenu mogu ostaviti samo kupci koji su ovaj proizvod primili.",
   REVIEW_EXISTS: () => "Već ste ocijenili ovaj proizvod.",
   WRONG_PASSWORD: () => "Trenutna lozinka nije ispravna.",
+  RESET_TOKEN_INVALID: () => "Ovaj link za novu lozinku je već iskorišćen ili je istekao.",
 };
 
 const FALLBACK: Record<number, string> = {

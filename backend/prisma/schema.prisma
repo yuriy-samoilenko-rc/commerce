@@ -23,42 +23,45 @@ enum Role {
 }
 
 model User {
-  id              String    @id @default(uuid())
-  email           String    @unique
-  passwordHash    String
-  name            String
-  role            Role      @default(CUSTOMER)
-  isActive        Boolean   @default(true)
-  lastLoginAt     DateTime?
+  id                String    @id @default(uuid())
+  email             String    @unique
+  passwordHash      String
+  name              String
+  role              Role      @default(CUSTOMER)
+  isActive          Boolean   @default(true)
+  lastLoginAt       DateTime?
+  // sessions issued before this moment are no longer accepted (set by password reset)
+  passwordChangedAt DateTime?
   // покупатель: телефон и адрес доставки, которыми магазин заполняет заказ
-  phone           String?
-  deliveryAddress String?
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  phone             String?
+  deliveryAddress   String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
 
   stockMovements      StockMovement[]
-  receivingsCreated   Receiving[]      @relation("ReceivingCreatedBy")
-  receivingsConfirmed Receiving[]      @relation("ReceivingConfirmedBy")
-  transfersCreated    Transfer[]       @relation("TransferCreatedBy")
-  transfersSent       Transfer[]       @relation("TransferSentBy")
-  transfersReceived   Transfer[]       @relation("TransferReceivedBy")
-  countsCreated       InventoryCount[] @relation("CountCreatedBy")
-  countsFinished      InventoryCount[] @relation("CountFinishedBy")
-  countsApproved      InventoryCount[] @relation("CountApprovedBy")
-  ordersPlaced        Order[]          @relation("OrderCustomer")
-  ordersCreated       Order[]          @relation("OrderCreatedBy")
+  receivingsCreated   Receiving[]          @relation("ReceivingCreatedBy")
+  receivingsConfirmed Receiving[]          @relation("ReceivingConfirmedBy")
+  transfersCreated    Transfer[]           @relation("TransferCreatedBy")
+  transfersSent       Transfer[]           @relation("TransferSentBy")
+  transfersReceived   Transfer[]           @relation("TransferReceivedBy")
+  countsCreated       InventoryCount[]     @relation("CountCreatedBy")
+  countsFinished      InventoryCount[]     @relation("CountFinishedBy")
+  countsApproved      InventoryCount[]     @relation("CountApprovedBy")
+  ordersPlaced        Order[]              @relation("OrderCustomer")
+  ordersCreated       Order[]              @relation("OrderCreatedBy")
   orderEvents         OrderEvent[]
-  returnsCreated      Return[]         @relation("ReturnCreatedBy")
-  returnsReceived     Return[]         @relation("ReturnReceivedBy")
-  returnsDecided      Return[]         @relation("ReturnDecidedBy")
-  returnsRefunded     Return[]         @relation("ReturnRefundedBy")
+  returnsCreated      Return[]             @relation("ReturnCreatedBy")
+  returnsReceived     Return[]             @relation("ReturnReceivedBy")
+  returnsDecided      Return[]             @relation("ReturnDecidedBy")
+  returnsRefunded     Return[]             @relation("ReturnRefundedBy")
   warrantyCases       WarrantyCase[]
   auditLogs           AuditLog[]
-  documentsCreated    Document[]       @relation("DocumentCreatedBy")
-  documentsReceived   Document[]       @relation("DocumentCustomer")
-  reviews             Review[]         @relation("ReviewAuthor")
-  reviewsModerated    Review[]         @relation("ReviewModerator")
+  documentsCreated    Document[]           @relation("DocumentCreatedBy")
+  documentsReceived   Document[]           @relation("DocumentCustomer")
+  reviews             Review[]             @relation("ReviewAuthor")
+  reviewsModerated    Review[]             @relation("ReviewModerator")
   wishlist            WishlistItem[]
+  passwordResets      PasswordResetToken[]
   notifications       Notification[]
 
   @@map("users")
@@ -69,6 +72,8 @@ model User {
 model Category {
   id       String     @id @default(uuid())
   name     String
+  // for shop URLs: /katalog/televizori
+  slug     String     @unique
   parentId String?
   parent   Category?  @relation("CategoryToCategory", fields: [parentId], references: [id], onDelete: Restrict)
   children Category[] @relation("CategoryToCategory")
@@ -89,6 +94,8 @@ model Brand {
 model Product {
   id                String          @id @default(uuid())
   name              String
+  // for shop URLs: /proizvod/samsung-galaxy-s24-256gb; stays when the name changes
+  slug              String          @unique
   sku               String          @unique
   barcode           String?         @unique
   model             String?
@@ -1125,4 +1132,19 @@ model WishlistItem {
 
   @@id([userId, productId])
   @@map("wishlist_items")
+}
+
+// Одноразовая ссылка «Zaboravljena lozinka»: хранится только хеш токена.
+model PasswordResetToken {
+  id        String    @id @default(uuid())
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@map("password_reset_tokens")
 }

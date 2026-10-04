@@ -19,7 +19,7 @@ export async function publicApi<T>(path: string, revalidate = 0): Promise<T | nu
 // Not cached between requests: delivery prices must match what checkout charges.
 export const shopInfo = cache(() => publicApi<ShopInfo>("/shop"));
 
-export const shopCategories = cache(async () => (await publicApi<ShopCategory[]>("/shop/categories", 30)) ?? []);
+export const shopCategories = cache(async () => (await publicApi<ShopCategory[]>("/shop/categories")) ?? []);
 
 /** The logged-in user, whatever the role (null for guests). */
 export const currentUser = cache(async () => {
@@ -38,6 +38,14 @@ export function findCategory(tree: ShopCategory[], id: string): ShopCategory | u
   for (const node of tree) {
     if (node.id === id) return node;
     const found = findCategory(node.children, id);
+    if (found) return found;
+  }
+}
+
+export function findCategoryBySlug(tree: ShopCategory[], slug: string): ShopCategory | undefined {
+  for (const node of tree) {
+    if (node.slug === slug) return node;
+    const found = findCategoryBySlug(node.children, slug);
     if (found) return found;
   }
 }

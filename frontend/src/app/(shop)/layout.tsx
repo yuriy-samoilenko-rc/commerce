@@ -1,4 +1,5 @@
 import { Figtree, Sora } from "next/font/google";
+import { CookieNotice } from "@/components/shop/cookie-notice";
 import { ShopFooter } from "@/components/shop/shop-footer";
 import { ShopHeader } from "@/components/shop/shop-header";
 import { ShopProvider } from "@/components/shop/shop-provider";
@@ -36,6 +37,7 @@ export default async function ShopLayout({ children }: LayoutProps<"/">) {
         <ShopHeader info={info} categories={categories} user={user} />
         <div className="flex-1">{children}</div>
         <ShopFooter info={info} />
+        <CookieNotice />
       </ShopProvider>
     </div>
   );

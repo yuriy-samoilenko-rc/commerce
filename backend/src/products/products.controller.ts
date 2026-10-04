@@ -14,6 +14,16 @@ export class ProductsController {
     return this.products.listPublic(query);
   }
 
+  @Get('sitemap')
+  sitemap() {
+    return this.products.sitemap();
+  }
+
+  @Get('by-slug/:slug')
+  findBySlug(@Param('slug') slug: string) {
+    return this.products.findPublicBySlug(slug);
+  }
+
   @Get(':id')
   findOne(@Param('id', ParseUUIDPipe) id: string) {
     return this.products.findPublic(id);

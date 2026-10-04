@@ -341,7 +341,7 @@ export function Checkout({ pickupPoints, returnDays }: { pickupPoints: PickupPoi
         </button>
         {!customer && <span className="text-sm text-shop-muted">Prijavite se da biste potvrdili narudžbu.</span>}
         <p className="text-[13px] leading-normal text-shop-muted">
-          Potvrdom prihvatate <Link href="/kupovina">uslove kupovine</Link>. Račun i garantni list dobijate uz proizvod.
+          Potvrdom prihvatate <Link href="/uslovi-koriscenja">uslove kupovine</Link>. Račun i garantni list dobijate uz proizvod.
         </p>
         <div className="flex items-center gap-3 rounded-2xl bg-shop-tint p-3.5 text-sm text-shop-navy">
           <ShieldCheck className="size-[22px] shrink-0" />

@@ -20,6 +20,7 @@ import {
   orderConfirmed,
   orderReceived,
   orderShipped,
+  passwordReset,
   returnDecided,
 } from './email-templates';
 
@@ -53,6 +54,20 @@ export class MailService {
       },
       select: { id: true },
     });
+  }
+
+  async passwordResetEmail(
+    db: Db,
+    user: { email: string; name: string },
+    link: string,
+    minutes: number,
+  ) {
+    const company = await this.company.get(db);
+    await this.enqueue(
+      db,
+      user.email,
+      passwordReset(company, user, link, minutes),
+    );
   }
 
   /** Nothing is queued for orders without an email address (e.g. phone orders). */
