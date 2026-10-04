@@ -79,7 +79,9 @@ export type ErrorCode =
   | 'PROMO_NOT_APPLICABLE'
   | 'PROMO_PERCENT'
   | 'PROMO_DATES'
-  | 'DOCUMENT_EMPTY';
+  | 'DOCUMENT_EMPTY'
+  | 'OWN_ACCOUNT'
+  | 'STAFF_ROLE';
 
 export type ErrorParams = Record<string, string | number>;
 

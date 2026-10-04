@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import * as bcrypt from 'bcryptjs';
 import { Prisma, Role } from '../generated/prisma/client';
 import { AuditService, changedKeys } from '../audit/audit.service';
+import { badRequest } from '../common/errors';
 import { pageArgs } from '../common/dto/pagination-query.dto';
 import { CustomerQueryDto } from './dto/customer-query.dto';
 import { PrismaService } from '../prisma/prisma.service';
@@ -51,10 +52,12 @@ export class UsersService {
     });
   }
 
+  /** Employees only; customer accounts have their own list (`listCustomers`). */
   findAll(): Promise<PublicUser[]> {
     return this.prisma.user.findMany({
+      where: { role: { not: Role.CUSTOMER } },
       select: publicUserSelect,
-      orderBy: { createdAt: 'desc' },
+      orderBy: [{ isActive: 'desc' }, { name: 'asc' }],
     });
   }
 
@@ -114,23 +117,57 @@ export class UsersService {
     });
   }
 
-  update(
+  /**
+   * `actorId` is the admin making the change: they cannot lock themselves out
+   * (deactivate or demote their own account), which also keeps at least one
+   * active admin. Customer and employee accounts do not turn into each other.
+   */
+  async update(
     id: string,
-    data: { name?: string; role?: Role; isActive?: boolean },
+    dto: { name?: string; role?: Role; isActive?: boolean; password?: string },
+    actorId?: string,
   ): Promise<PublicUser> {
+    const current = await this.findById(id);
+    if (
+      id === actorId &&
+      (dto.isActive === false ||
+        (dto.role !== undefined && dto.role !== Role.ADMIN))
+    ) {
+      throw badRequest(
+        'OWN_ACCOUNT',
+        'You cannot deactivate or demote your own account',
+      );
+    }
+    if (
+      dto.role !== undefined &&
+      (dto.role === Role.CUSTOMER) !== (current.role === Role.CUSTOMER)
+    ) {
+      throw badRequest(
+        'STAFF_ROLE',
+        'Customer and employee accounts cannot be converted',
+      );
+    }
+    const { password, ...data } = dto;
+    const keys = changedKeys(data);
+    const changes: Prisma.UserUpdateInput = { ...data };
+    if (password !== undefined) {
+      changes.passwordHash = await bcrypt.hash(password, BCRYPT_ROUNDS);
+      changes.passwordChangedAt = new Date();
+      keys.push('passwordChangedAt');
+    }
     return this.audit.trackUpdate(
       () =>
         this.prisma.user.findUnique({
           where: { id },
-          select: publicUserSelect,
+          select: { ...publicUserSelect, passwordChangedAt: true },
         }),
       () =>
         this.prisma.user.update({
           where: { id },
-          data,
+          data: changes,
           select: publicUserSelect,
         }),
-      changedKeys(data),
+      keys,
     );
   }
 }

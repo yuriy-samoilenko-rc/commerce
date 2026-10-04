@@ -6,6 +6,7 @@
 import type { AuthService } from "@backend/auth/auth.service";
 import type { PublicUser } from "@backend/users/users.service";
 import type { DashboardService } from "@backend/reports/dashboard.service";
+import type { ReportsService } from "@backend/reports/reports.service";
 import type { NotificationsService } from "@backend/notifications/notifications.service";
 import type { OrdersService } from "@backend/orders/orders.service";
 import type { ProductsService } from "@backend/products/products.service";
@@ -59,6 +60,7 @@ export type CategoryTree = Returns<CategoriesService["findTree"]>;
 export type BrandList = Returns<BrandsService["findAll"]>;
 export type StockList = Returns<StockService["listStock"]>;
 export type MovementList = Returns<StockService["listMovements"]>;
+export type UserList = Returns<UsersService["findAll"]>;
 export type CustomerList = Returns<UsersService["listCustomers"]>;
 export type Customer = CustomerList["items"][number];
 export type WarehouseList = Returns<WarehousesService["findAll"]>;
@@ -106,3 +108,5 @@ export type PromoCodeList = Returns<PromoCodesService["list"]>;
 export type PromoCode = PromoCodeList[number];
 export type QuestionPage = Returns<QuestionsService["listForProduct"]>;
 export type StaffQuestionList = Returns<QuestionsService["listForStaff"]>;
+/** Every report has the same shape: typed columns, rows and totals. */
+export type Report = Returns<ReportsService["sales"]>;
