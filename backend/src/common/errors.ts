@@ -82,7 +82,11 @@ export type ErrorCode =
   | 'DOCUMENT_EMPTY'
   | 'OWN_ACCOUNT'
   | 'STAFF_ROLE'
-  | 'SUPPLIER_IN_USE';
+  | 'SUPPLIER_IN_USE'
+  | 'CATEGORY_NOT_EMPTY'
+  | 'CATEGORY_CYCLE'
+  | 'BRAND_IN_USE'
+  | 'MOVE_TO_INVALID';
 
 export type ErrorParams = Record<string, string | number>;
 

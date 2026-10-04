@@ -1,6 +1,6 @@
 "use client";
 
-import { ChartColumn, ClipboardCheck, Handshake, UsersRound, FileText, LayoutDashboard, MessageCircleQuestion, Settings, Star, Store, TicketPercent, RotateCcw, ShieldCheck, Smartphone, Package, PackagePlus, ShoppingCart, Truck, Warehouse, type LucideIcon } from "lucide-react";
+import { ChartColumn, ClipboardCheck, FolderTree, Handshake, UsersRound, FileText, LayoutDashboard, MessageCircleQuestion, Settings, Star, Store, TicketPercent, RotateCcw, ShieldCheck, Smartphone, Package, PackagePlus, ShoppingCart, Truck, Warehouse, type LucideIcon } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { Role } from "@/lib/backend-types";
@@ -21,6 +21,7 @@ const NAV: NavItem[] = [
   { href: "/admin/povracaji", label: "Povraćaji", icon: RotateCcw },
   { href: "/admin/garancija", label: "Garancija", icon: ShieldCheck },
   { href: "/admin/proizvodi", label: "Proizvodi", icon: Package },
+  { href: "/admin/katalog", label: "Kategorije i brendovi", icon: FolderTree, roles: ["ADMIN"] },
   { href: "/admin/skladiste", label: "Skladište", icon: Warehouse },
   { href: "/admin/prijem", label: "Prijem robe", icon: PackagePlus },
   { href: "/admin/dobavljaci", label: "Dobavljači", icon: Handshake, roles: ["ADMIN", "MANAGER", "ACCOUNTANT"] },

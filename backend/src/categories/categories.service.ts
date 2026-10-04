@@ -1,10 +1,6 @@
-import {
-  BadRequestException,
-  ConflictException,
-  Injectable,
-  NotFoundException,
-} from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { AuditService, changedKeys } from '../audit/audit.service';
+import { badRequest, conflict } from '../common/errors';
 import { uniqueSlug } from '../common/slug';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateCategoryDto } from './dto/create-category.dto';
@@ -16,6 +12,12 @@ export interface CategoryNode {
   slug: string;
   parentId: string | null;
   children: CategoryNode[];
+}
+
+export interface ManagedCategory extends Omit<CategoryNode, 'children'> {
+  products: number;
+  totalProducts: number;
+  children: ManagedCategory[];
 }
 
 @Injectable()
@@ -40,6 +42,38 @@ export class CategoriesService {
       const parent = node.parentId ? nodes.get(node.parentId) : undefined;
       (parent ? parent.children : roots).push(node);
     }
+    return roots;
+  }
+
+  /**
+   * For the catalog screen: the tree with product counts, own (`products`) and
+   * including every subcategory (`totalProducts`).
+   */
+  async manageTree() {
+    const rows = await this.prisma.category.findMany({
+      select: {
+        id: true,
+        name: true,
+        slug: true,
+        parentId: true,
+        _count: { select: { products: true } },
+      },
+      orderBy: { name: 'asc' },
+    });
+    const nodes = new Map<string, ManagedCategory>(
+      rows.map(({ _count, ...r }) => [
+        r.id,
+        { ...r, products: _count.products, totalProducts: 0, children: [] },
+      ]),
+    );
+    const roots: ManagedCategory[] = [];
+    for (const node of nodes.values()) {
+      const parent = node.parentId ? nodes.get(node.parentId) : undefined;
+      (parent ? parent.children : roots).push(node);
+    }
+    const total = (n: ManagedCategory): number =>
+      (n.totalProducts = n.children.reduce((s, c) => s + total(c), n.products));
+    roots.forEach(total);
     return roots;
   }
 
@@ -74,19 +108,51 @@ export class CategoriesService {
     );
   }
 
-  async remove(id: string) {
+  /**
+   * Deletes a category. One with products or subcategories needs `moveTo`: they
+   * go there first (it must not be the category itself or inside it).
+   */
+  async remove(id: string, moveTo?: string) {
     const category = await this.prisma.category.findUnique({
       where: { id },
       select: { _count: { select: { children: true, products: true } } },
     });
     if (!category) throw new NotFoundException('Category not found');
     const { children, products } = category._count;
-    if (children || products) {
-      throw new ConflictException(
+    if ((children || products) && !moveTo) {
+      throw conflict(
+        'CATEGORY_NOT_EMPTY',
         `Category has ${children} subcategories and ${products} products; move them first`,
+        { children, products },
       );
     }
-    await this.prisma.category.delete({ where: { id } });
+    if (moveTo) {
+      const inside = await this.withDescendantIds(id);
+      const target = await this.prisma.category.findUnique({
+        where: { id: moveTo },
+      });
+      if (!target || inside.includes(moveTo)) {
+        throw badRequest(
+          'MOVE_TO_INVALID',
+          'Target must be an existing category outside the deleted one',
+        );
+      }
+    }
+    await this.prisma.$transaction([
+      ...(moveTo
+        ? [
+            this.prisma.product.updateMany({
+              where: { categoryId: id },
+              data: { categoryId: moveTo },
+            }),
+            this.prisma.category.updateMany({
+              where: { parentId: id },
+              data: { parentId: moveTo },
+            }),
+          ]
+        : []),
+      this.prisma.category.delete({ where: { id } }),
+    ]);
   }
 
   // Returns the category id plus all nested subcategory ids, so filtering by
@@ -113,7 +179,7 @@ export class CategoriesService {
     });
     const parentOf = new Map(rows.map((r) => [r.id, r.parentId]));
     if (!parentOf.has(newParentId))
-      throw new BadRequestException('Parent category does not exist');
+      throw badRequest('CATEGORY_CYCLE', 'Parent category does not exist');
 
     for (
       let cur: string | null | undefined = newParentId;
@@ -121,7 +187,8 @@ export class CategoriesService {
       cur = parentOf.get(cur)
     ) {
       if (cur === id) {
-        throw new BadRequestException(
+        throw badRequest(
+          'CATEGORY_CYCLE',
           'A category cannot be moved inside itself or its subcategory',
         );
       }

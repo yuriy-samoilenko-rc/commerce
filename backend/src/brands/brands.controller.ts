@@ -9,9 +9,11 @@ import {
   ParseUUIDPipe,
   Patch,
   Post,
+  Query,
 } from '@nestjs/common';
 import { Public } from '../auth/decorators/public.decorator';
 import { Roles } from '../auth/decorators/roles.decorator';
+import { MoveToQueryDto } from '../common/dto/move-to-query.dto';
 import { Role } from '../generated/prisma/client';
 import { BrandsService } from './brands.service';
 import { CreateBrandDto } from './dto/create-brand.dto';
@@ -25,6 +27,13 @@ export class BrandsController {
   @Get()
   findAll() {
     return this.brands.findAll();
+  }
+
+  /** With product counts, for the admin's catalog screen. */
+  @Roles(Role.ADMIN)
+  @Get('manage')
+  manage() {
+    return this.brands.manageList();
   }
 
   @Public()
@@ -48,7 +57,7 @@ export class BrandsController {
   @Roles(Role.ADMIN)
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
-  remove(@Param('id', ParseUUIDPipe) id: string) {
-    return this.brands.remove(id);
+  remove(@Param('id', ParseUUIDPipe) id: string, @Query() q: MoveToQueryDto) {
+    return this.brands.remove(id, q.moveTo);
   }
 }

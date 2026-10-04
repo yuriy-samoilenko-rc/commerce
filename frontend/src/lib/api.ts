@@ -105,6 +105,10 @@ const CODED: Record<string, (p: Params) => string> = {
   OWN_ACCOUNT: () => "Ne možete deaktivirati svoj nalog niti sebi promijeniti ulogu.",
   STAFF_ROLE: () => "Nalog kupca ne može postati nalog zaposlenog, niti obrnuto.",
   SUPPLIER_IN_USE: () => "Dobavljač ima prijeme ili dokumente, pa se ne može obrisati — deaktivirajte ga.",
+  CATEGORY_NOT_EMPTY: () => "Kategorija ima proizvode ili podkategorije — izaberite gdje da se premjeste.",
+  CATEGORY_CYCLE: () => "Kategorija ne može biti unutar same sebe ili svoje podkategorije.",
+  BRAND_IN_USE: () => "Brend ima proizvode — izaberite brend u koji da se premjeste.",
+  MOVE_TO_INVALID: () => "Izaberite drugu kategoriju ili brend za premještanje.",
 };
 
 const FALLBACK: Record<number, string> = {
