@@ -54,6 +54,8 @@ function staffSelect(canSeeCost: boolean) {
     trackSerial: true,
     lowStockThreshold: true,
     stockAlert: true,
+    // customers waiting for a "back in stock" email: a hint for purchasing
+    _count: { select: { stockAlerts: true } },
     vatPercent: true,
     isArchived: true,
     createdAt: true,

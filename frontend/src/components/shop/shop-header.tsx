@@ -1,8 +1,9 @@
-import { Search, Tag, User } from "lucide-react";
+import { Tag, User } from "lucide-react";
 import Link from "next/link";
 import type { ShopCategory, ShopInfo, User as UserType } from "@/lib/backend-types";
 import { money } from "@/lib/format";
 import { categoryHref } from "@/lib/shop-links";
+import { SearchBox } from "./search-box";
 import { CartLink, MegaMenu, MobileMenu, WishlistLink } from "./header-parts";
 
 export function Logo({ small }: { small?: boolean }) {
@@ -16,26 +17,6 @@ export function Logo({ small }: { small?: boolean }) {
         TechStore
       </span>
     </Link>
-  );
-}
-
-function SearchForm({ className, defaultValue }: { className?: string; defaultValue?: string }) {
-  return (
-    <form action="/katalog" role="search" className={className}>
-      <div className="flex h-12 overflow-hidden rounded-xl border-[1.5px] border-shop-field bg-white focus-within:border-shop-blue">
-        <input
-          type="search"
-          name="q"
-          defaultValue={defaultValue}
-          aria-label="Pretraga"
-          placeholder="Pretražite televizore, telefone, laptopove…"
-          className="min-w-0 grow bg-transparent px-4 text-[15px] text-shop-ink outline-none placeholder:text-shop-muted"
-        />
-        <button type="submit" aria-label="Traži" className="flex w-14 items-center justify-center bg-shop-blue text-white hover:bg-shop-blue-dark">
-          <Search className="size-5" />
-        </button>
-      </div>
-    </form>
   );
 }
 
@@ -73,7 +54,7 @@ export function ShopHeader({
         <div className="flex h-16 items-center gap-2 px-2 sm:gap-4 lg:h-20 lg:gap-10 lg:px-20">
           <MobileMenu categories={categories} account={account} />
           <Logo />
-          <SearchForm className="hidden grow md:block" />
+          <SearchBox className="hidden grow md:block" />
           <nav aria-label="Nalog i korpa" className="ml-auto flex items-center gap-1 sm:gap-1.5 md:ml-0">
             <Link
               href={account.href}
@@ -86,7 +67,7 @@ export function ShopHeader({
             <CartLink />
           </nav>
         </div>
-        <SearchForm className="px-4 pb-3 md:hidden" />
+        <SearchBox className="mx-4 mb-3 md:hidden" />
         <nav aria-label="Kategorije" className="hidden h-[52px] items-center gap-7 px-20 text-[15px] font-semibold lg:flex">
           {/* Categories take what room is left; the ones that do not fit are in "Sve kategorije". */}
           <MegaMenu categories={categories} />

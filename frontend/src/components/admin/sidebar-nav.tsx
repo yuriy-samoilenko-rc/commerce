@@ -1,6 +1,6 @@
 "use client";
 
-import { ClipboardCheck, FileText, LayoutDashboard, Settings, Star, Store, RotateCcw, ShieldCheck, Smartphone, Package, PackagePlus, ShoppingCart, Truck, Warehouse, type LucideIcon } from "lucide-react";
+import { ClipboardCheck, FileText, LayoutDashboard, MessageCircleQuestion, Settings, Star, Store, TicketPercent, RotateCcw, ShieldCheck, Smartphone, Package, PackagePlus, ShoppingCart, Truck, Warehouse, type LucideIcon } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { Role } from "@/lib/backend-types";
@@ -27,6 +27,8 @@ const NAV: NavItem[] = [
   { href: "/admin/popis", label: "Popis", icon: ClipboardCheck },
   { href: "/admin/dokumenti", label: "Dokumenti", icon: FileText },
   { href: "/admin/ocjene", label: "Ocjene kupaca", icon: Star, roles: ["ADMIN", "MANAGER"] },
+  { href: "/admin/pitanja", label: "Pitanja kupaca", icon: MessageCircleQuestion, roles: ["ADMIN", "MANAGER"] },
+  { href: "/admin/promo-kodovi", label: "Promo kodovi", icon: TicketPercent, roles: ["ADMIN", "MANAGER"] },
   { href: "/admin/podesavanja", label: "Podešavanja", icon: Settings, roles: ["ADMIN"] },
   { href: "/", label: "Internet prodavnica", icon: Store },
   // The phone app for scanning; admins, managers and storekeepers work in the warehouse.

@@ -26,6 +26,12 @@ export class FacetsQueryDto {
   onSale?: boolean;
 }
 
+export class SuggestQueryDto {
+  @IsString()
+  @MaxLength(100)
+  q: string;
+}
+
 @Public()
 @Controller('shop')
 export class ShopController {
@@ -40,6 +46,11 @@ export class ShopController {
   @Get('categories')
   categories() {
     return this.shop.categories();
+  }
+
+  @Get('suggest')
+  suggest(@Query() query: SuggestQueryDto) {
+    return this.shop.suggest(query.q);
   }
 
   @Get('facets')

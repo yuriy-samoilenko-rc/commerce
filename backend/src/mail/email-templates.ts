@@ -192,3 +192,32 @@ export function passwordReset(
     `Link važi ${minutes} minuta i može se iskoristiti samo jednom. Ako niste tražili novu lozinku, zanemarite ovu poruku — vaša lozinka ostaje ista.`,
   ]);
 }
+
+export function backInStock(
+  company: CompanySettings,
+  product: { name: string },
+  link: string,
+): EmailContent {
+  return wrap(company, `„${product.name}“ je ponovo na stanju`, [
+    'Poštovani,',
+    `proizvod „${product.name}“ koji ste čekali ponovo je na stanju i možete ga poručiti:`,
+    link,
+    'Količine su ograničene, pa ga ne možemo rezervisati unaprijed. Ovo je jedino obavještenje — vaša email adresa je nakon slanja obrisana sa liste čekanja.',
+  ]);
+}
+
+export function questionAnswered(
+  company: CompanySettings,
+  user: { name: string },
+  product: { name: string },
+  qa: { question: string; answer: string },
+  link: string,
+): EmailContent {
+  return wrap(company, `Odgovor na vaše pitanje o „${product.name}“`, [
+    `Poštovani/a ${user.name},`,
+    `odgovorili smo na vaše pitanje o proizvodu „${product.name}“.`,
+    `Pitanje: ${qa.question}`,
+    `Odgovor: ${qa.answer}`,
+    `Pitanje i odgovor vidljivi su i na stranici proizvoda: ${link}`,
+  ]);
+}

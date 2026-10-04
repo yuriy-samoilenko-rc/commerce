@@ -7,6 +7,7 @@ import { AuditService } from '../audit/audit.service';
 import { Role } from '../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { badRequest } from '../common/errors';
+import { shopUrl } from '../common/shop-url';
 import {
   PublicUser,
   publicUserSelect,
@@ -24,9 +25,6 @@ import { JwtPayload } from './jwt-payload';
 const RESET_MINUTES = 60;
 const hashToken = (token: string) =>
   createHash('sha256').update(token).digest('hex');
-/** Where the shop runs; reset links point there. */
-const shopUrl = () =>
-  (process.env.SHOP_URL ?? 'http://localhost:3100').replace(/\/+$/, '');
 
 // Compared against when the email is unknown, so a missing user costs the same
 // time as a wrong password and response timing doesn't reveal registered emails.

@@ -32,6 +32,8 @@ export default async function PrivacyPage() {
             <ul key="a">
               <li>Nalog: ime i prezime, email i lozinku (čuvamo samo njen šifrovani zapis), a po želji telefon i adresu za dostavu.</li>
               <li>Narudžbe: ime, telefon, email, adresu dostave ili izabranu prodavnicu, naručene proizvode, način plaćanja i napomenu.</li>
+              <li>Obavještenje o dostupnosti: email i proizvod koji čekate; brišemo ih čim pošaljemo obavještenje.</li>
+              <li>Pitanja o proizvodima: tekst pitanja; uz objavljeno pitanje prikazuje se samo ime i početno slovo prezimena.</li>
               <li>Ocjene proizvoda: ocjenu i tekst; uz ocjenu se javno prikazuje samo ime i početno slovo prezimena.</li>
               <li>Tehnički podaci: kolačić za prijavu i podaci u memoriji pregledača (korpa, lista želja, poređenje) — vidi tačku 7.</li>
             </ul>,

@@ -188,6 +188,7 @@ export default async function ProductPage({ params }: PageProps<"/admin/proizvod
                   ["Serijski brojevi", product.trackSerial ? "Da, po komadu" : "Ne"],
                   ["Prag „malo robe“", product.lowStockThreshold ?? "opšti iz podešavanja"],
                   product.ratingCount > 0 && ["Ocjena kupaca", `${Number(product.ratingAvg).toLocaleString("sr-Latn-ME")} (${product.ratingCount})`],
+                  product._count.stockAlerts > 0 && ["Kupaca čeka obavještenje", String(product._count.stockAlerts)],
                   ["Izmijenjen", dateTime(product.updatedAt)],
                 ]}
               />

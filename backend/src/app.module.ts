@@ -11,6 +11,9 @@ import { MailModule } from './mail/mail.module';
 import { MediaModule } from './media/media.module';
 import { ReviewsModule } from './reviews/reviews.module';
 import { ShopModule } from './shop/shop.module';
+import { StockAlertsModule } from './stock-alerts/stock-alerts.module';
+import { PromoModule } from './promo/promo.module';
+import { QuestionsModule } from './questions/questions.module';
 import { WishlistModule } from './wishlist/wishlist.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { OrdersModule } from './orders/orders.module';
@@ -54,6 +57,9 @@ import { WarrantyModule } from './warranty/warranty.module';
     ShopModule,
     ReviewsModule,
     WishlistModule,
+    StockAlertsModule,
+    PromoModule,
+    QuestionsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

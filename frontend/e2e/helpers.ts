@@ -230,3 +230,45 @@ export async function login(page: Page, email: string, password: string) {
 export async function expectPath(page: Page, path: string) {
   await expect(page).toHaveURL((url) => url.pathname === path);
 }
+
+// ---------- online shop ----------
+
+export async function customerToken(email: string, password: string) {
+  const res = await fetch(`${API}/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, password }),
+  });
+  return ((await res.json()) as { accessToken: string }).accessToken;
+}
+
+export async function shopLogin(page: Page, email: string, password: string) {
+  await page.goto("/nalog/prijava");
+  await page.getByLabel("Email").fill(email);
+  await page.getByLabel("Lozinka", { exact: true }).fill(password);
+  await page.getByRole("button", { name: "Prijavi se" }).click();
+  await expectPath(page, "/nalog");
+}
+
+/** A pickup order of one unit, taken all the way to the customer. */
+export async function receivedOrder(customer: { email: string; password: string; name: string }) {
+  const { product, warehouse } = await seedProduct(2);
+  const token = await customerToken(customer.email, customer.password);
+  const res = await fetch(`${API}/orders`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    body: JSON.stringify({
+      items: [{ productId: product.id, quantity: 1 }],
+      customerName: customer.name,
+      customerPhone: "+382 67 111 222",
+      deliveryMethod: "PICKUP",
+      paymentMethod: "CASH_ON_DELIVERY",
+    }),
+  });
+  const order = (await res.json()) as { id: string };
+  for (const step of ["confirm", "mark-paid", "start-picking"]) await apiAsAdmin("POST", `/admin/orders/${order.id}/${step}`, {});
+  await apiAsAdmin("POST", `/admin/orders/${order.id}/pick`, { code: product.sku, warehouseId: warehouse.id, quantity: 1 });
+  await apiAsAdmin("POST", `/admin/orders/${order.id}/complete-picking`, {});
+  await apiAsAdmin("POST", `/admin/orders/${order.id}/ship`, {});
+  return { product, order };
+}

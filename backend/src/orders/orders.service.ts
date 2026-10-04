@@ -33,6 +33,7 @@ import {
   OrderItemDto,
   OrderQueryDto,
 } from './dto/order.dto';
+import { PromoCodesService } from '../promo/promo-codes.service';
 import { CompanySettingsService } from '../settings/company-settings.service';
 import { reservationTtlMs } from './order-settings';
 
@@ -60,6 +61,8 @@ const orderFields = {
   customerEmail: true,
   deliveryAddress: true,
   pickupWarehouse: { select: { id: true, name: true, address: true } },
+  discountTotal: true,
+  promoCode: { select: { code: true } },
   comment: true,
   subtotal: true,
   deliveryFee: true,
@@ -83,6 +86,7 @@ const itemFields = {
   sku: true,
   quantity: true,
   unitPrice: true,
+  listPrice: true,
   vatPercent: true,
   lineTotal: true,
 } satisfies Prisma.OrderItemSelect;
@@ -176,6 +180,7 @@ export class OrdersService {
     private readonly notifications: NotificationsService,
     private readonly mail: MailService,
     private readonly settings: CompanySettingsService,
+    private readonly promo: PromoCodesService,
   ) {}
 
   // ---------- placing ----------
@@ -233,7 +238,7 @@ export class OrdersService {
       const now = new Date();
       const byId = new Map(products.map((p) => [p.id, p]));
 
-      const lines = items.map((item) => {
+      const priced = items.map((item) => {
         const p = byId.get(item.productId);
         if (!p || p.isArchived)
           throw badRequest(
@@ -251,10 +256,26 @@ export class OrdersService {
           sku: p.sku,
           quantity: item.quantity,
           unitPrice,
+          listPrice: null as Prisma.Decimal | null,
           vatPercent: p.vatPercent,
-          lineTotal: unitPrice.mul(item.quantity),
+          onSale: !!onSale,
         };
       });
+      // A promo code lowers the unit prices themselves, so the invoice, VAT and any
+      // later refund all follow what was actually paid.
+      const applied = dto.promoCode
+        ? await this.promo.applyToOrder(tx, dto.promoCode, priced, opts.userId)
+        : null;
+      const lines = (applied?.lines ?? priced).map((l) => ({
+        productId: l.productId,
+        productName: l.productName,
+        sku: l.sku,
+        quantity: l.quantity,
+        unitPrice: l.unitPrice,
+        listPrice: l.listPrice,
+        vatPercent: l.vatPercent,
+        lineTotal: l.unitPrice.mul(l.quantity),
+      }));
       const subtotal = lines.reduce(
         (sum, l) => sum.add(l.lineTotal),
         new Prisma.Decimal(0),
@@ -285,6 +306,8 @@ export class OrdersService {
               : null,
           pickupWarehouseId,
           comment: dto.comment ?? null,
+          promoCodeId: applied?.promoCodeId ?? null,
+          discountTotal: applied?.discountTotal ?? 0,
           subtotal,
           deliveryFee,
           total: subtotal.add(deliveryFee),
@@ -500,6 +523,11 @@ export class OrdersService {
       if (!throwIfNotMatched) return false;
       throw wrongState(await this.getOrThrow(tx, id), 'cancelled');
     }
+    const { promoCodeId } = await tx.order.findUniqueOrThrow({
+      where: { id },
+      select: { promoCodeId: true },
+    });
+    if (promoCodeId) await this.promo.release(tx, promoCodeId);
     await this.ledger.releaseReservations(tx, id, reason);
     await this.documents.cancelOrderInvoices(tx, id, reason);
     await this.mail.orderEmail(tx, 'CANCELLED', id);

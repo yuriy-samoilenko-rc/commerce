@@ -8,7 +8,7 @@ import type { CustomerOrder } from "@/lib/backend-types";
 import { dateTime, money } from "@/lib/format";
 import { isUuid } from "@/lib/ids";
 import { productHref } from "@/lib/shop-links";
-import { DOCUMENT_TYPE, PAYMENT_METHOD, PAYMENT_STATUS } from "@/lib/labels";
+import { DOCUMENT_TYPE, PAYMENT_METHOD, PAYMENT_STATUS, RETURNABLE_ORDER } from "@/lib/labels";
 import { apiServer } from "@/lib/session";
 import { productPhotos } from "../../order-list";
 import { CancelOrder } from "./cancel-order";
@@ -90,6 +90,12 @@ export default async function OrderPage({ params, searchParams }: PageProps<"/na
               <dt className="text-shop-muted">Proizvodi</dt>
               <dd className="font-semibold">{money(order.subtotal)}</dd>
             </div>
+            {Number(order.discountTotal) > 0 && (
+              <div className="flex justify-between text-shop-ok">
+                <dt>od toga popust{order.promoCode && ` (${order.promoCode.code})`}</dt>
+                <dd className="font-semibold">−{money(order.discountTotal)}</dd>
+              </div>
+            )}
             <div className="flex justify-between">
               <dt className="text-shop-muted">Dostava</dt>
               <dd className="font-semibold">{Number(order.deliveryFee) ? money(order.deliveryFee) : "Besplatno"}</dd>
@@ -147,6 +153,14 @@ export default async function OrderPage({ params, searchParams }: PageProps<"/na
             )}
           </section>
           {cancellable && <CancelOrder orderId={order.id} />}
+          {RETURNABLE_ORDER.includes(order.status) && (
+            <Link
+              href={`/nalog/narudzbe/${order.id}/povracaj`}
+              className="flex h-12 items-center justify-center rounded-2xl border-[1.5px] border-shop-field bg-white font-bold text-shop-ink hover:border-shop-blue"
+            >
+              Vrati proizvod
+            </Link>
+          )}
         </div>
       </div>
     </>

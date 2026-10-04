@@ -113,7 +113,10 @@ export async function buildInvoice(
 ): Promise<BuiltDocument> {
   const o = await tx.order.findUniqueOrThrow({
     where: { id: orderId },
-    include: { items: { orderBy: { productName: 'asc' } } },
+    include: {
+      items: { orderBy: { productName: 'asc' } },
+      promoCode: { select: { code: true } },
+    },
   });
   const byRate = new Map<
     string,
@@ -181,6 +184,14 @@ export async function buildInvoice(
         { label: 'Datum narudžbe', value: day(o.createdAt) },
         { label: 'Plaćanje', value: PAYMENT[o.paymentMethod] },
         { label: 'Isporuka', value: DELIVERY[o.deliveryMethod] },
+        ...(o.promoCode
+          ? [
+              {
+                label: 'Promo kod',
+                value: `${o.promoCode.code} (popust ${money(o.discountTotal)} ${company.currency}, uračunat u cijene)`,
+              },
+            ]
+          : []),
       ],
       columns: [
         { key: 'n', label: 'Rb.', width: 4, align: 'right' },

@@ -110,6 +110,12 @@ export default async function OrderPage({ params }: PageProps<"/admin/narudzbe/[
             <dl className="ml-auto grid w-full max-w-xs grid-cols-2 gap-1 text-sm">
               <dt className="text-muted-foreground">Međuzbir</dt>
               <dd className="text-right tabular-nums">{money(order.subtotal)}</dd>
+              {Number(order.discountTotal) > 0 && (
+                <>
+                  <dt className="text-muted-foreground">od toga promo {order.promoCode?.code}</dt>
+                  <dd className="text-right tabular-nums">−{money(order.discountTotal)}</dd>
+                </>
+              )}
               <dt className="text-muted-foreground">Dostava</dt>
               <dd className="text-right tabular-nums">{money(order.deliveryFee)}</dd>
               <dt className="font-medium">Ukupno sa PDV-om</dt>

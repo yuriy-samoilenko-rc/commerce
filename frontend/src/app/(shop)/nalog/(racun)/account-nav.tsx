@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 const LINKS = [
   { href: "/nalog", label: "Pregled" },
   { href: "/nalog/narudzbe", label: "Moje narudžbe" },
+  { href: "/nalog/povracaji", label: "Povraćaji" },
   { href: "/nalog/lista-zelja", label: "Lista želja", wish: true },
   { href: "/nalog/podaci", label: "Lični podaci i adresa" },
 ];

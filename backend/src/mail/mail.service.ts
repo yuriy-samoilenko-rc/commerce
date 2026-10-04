@@ -14,6 +14,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CompanySettingsService } from '../settings/company-settings.service';
 import type { Tx } from '../stock/stock-ledger.service';
 import {
+  backInStock,
   documentEmail,
   EmailContent,
   orderCancelled,
@@ -21,6 +22,7 @@ import {
   orderReceived,
   orderShipped,
   passwordReset,
+  questionAnswered,
   returnDecided,
 } from './email-templates';
 
@@ -54,6 +56,31 @@ export class MailService {
       },
       select: { id: true },
     });
+  }
+
+  async questionAnsweredEmail(
+    db: Db,
+    user: { email: string; name: string },
+    product: { name: string },
+    qa: { question: string; answer: string },
+    link: string,
+  ) {
+    const company = await this.company.get(db);
+    await this.enqueue(
+      db,
+      user.email,
+      questionAnswered(company, user, product, qa, link),
+    );
+  }
+
+  async stockBackEmail(
+    db: Db,
+    to: string,
+    product: { name: string },
+    link: string,
+  ) {
+    const company = await this.company.get(db);
+    await this.enqueue(db, to, backInStock(company, product, link));
   }
 
   async passwordResetEmail(

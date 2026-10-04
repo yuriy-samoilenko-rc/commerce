@@ -11,7 +11,7 @@ import { FreeShippingBar, ProductPhoto } from "@/components/shop/bits";
 import { productHref } from "@/lib/shop-links";
 import { useShop } from "@/components/shop/shop-provider";
 import { api, ApiError } from "@/lib/api";
-import type { CustomerOrder, PickupPoint, Recommendations } from "@/lib/backend-types";
+import type { CustomerOrder, PickupPoint, PromoQuote, Recommendations } from "@/lib/backend-types";
 import { money } from "@/lib/format";
 import { courierQuote, useCart } from "@/lib/shop-products";
 import { cart, MAX_QTY } from "@/lib/shop-store";
@@ -67,9 +67,26 @@ export function Checkout({ pickupPoints, returnDays }: { pickupPoints: PickupPoi
     select: (r) => r.addOns.filter((p) => !lines.some((l) => l.productId === p.id)).slice(0, 3),
   });
 
-  const quote = courierQuote(subtotal, delivery.courierFee, delivery.freeShippingFrom);
+  // The promo code is re-checked whenever the cart changes; the order checks it once more.
+  const [promoCode, setPromoCode] = useState<string | null>(null);
+  const [promoInput, setPromoInput] = useState("");
+  const linesKey = lines.map((l) => `${l.productId}:${l.quantity}`).join(",");
+  const promo = useQuery({
+    queryKey: ["promo", promoCode, linesKey],
+    enabled: !!promoCode && lines.length > 0,
+    retry: false,
+    queryFn: () =>
+      api<PromoQuote>("/shop/promo", {
+        method: "POST",
+        json: { code: promoCode, items: lines.map((l) => ({ productId: l.productId, quantity: l.quantity })) },
+      }),
+  });
+  const discount = promo.data ? Number(promo.data.discount) : 0;
+  const goods = subtotal - discount;
+
+  const quote = courierQuote(goods, delivery.courierFee, delivery.freeShippingFrom);
   const deliveryFee = method === "PICKUP" ? 0 : quote.fee;
-  const total = subtotal + deliveryFee;
+  const total = goods + deliveryFee;
 
   if (loading) return <div className="h-64 animate-pulse rounded-3xl bg-white" />;
   if (!items.length)
@@ -102,6 +119,7 @@ export function Checkout({ pickupPoints, returnDays }: { pickupPoints: PickupPoi
           deliveryMethod: method,
           ...(method === "PICKUP" ? (pickupId ? { pickupWarehouseId: pickupId } : {}) : { deliveryAddress: address }),
           paymentMethod: payment,
+          ...(promoCode && promo.data && { promoCode }),
           comment: get("comment") || undefined,
         },
       });
@@ -314,18 +332,74 @@ export function Checkout({ pickupPoints, returnDays }: { pickupPoints: PickupPoi
       <aside aria-label="Pregled narudžbe" className="flex flex-col gap-4 rounded-3xl border border-shop-line bg-white p-5 md:p-7 lg:sticky lg:top-6 lg:col-span-4">
         <h2 className="font-display text-[22px] font-bold tracking-tight">Pregled narudžbe</h2>
         {method === "COURIER" && (
-          <FreeShippingBar subtotal={subtotal} courierFee={delivery.courierFee} freeShippingFrom={delivery.freeShippingFrom} />
+          <FreeShippingBar subtotal={goods} courierFee={delivery.courierFee} freeShippingFrom={delivery.freeShippingFrom} />
         )}
         <dl className="flex flex-col gap-3 text-[15px]">
           <div className="flex justify-between">
             <dt className="text-shop-muted">Proizvodi ({pieces} kom.)</dt>
             <dd className="font-semibold">{money(subtotal)}</dd>
           </div>
+          {promo.data && discount > 0 && (
+            <div className="flex justify-between text-shop-ok">
+              <dt>Popust ({promo.data.code})</dt>
+              <dd className="font-semibold">−{money(discount)}</dd>
+            </div>
+          )}
           <div className="flex justify-between">
             <dt className="text-shop-muted">Dostava</dt>
             <dd className="font-semibold">{deliveryFee ? money(deliveryFee) : "Besplatno"}</dd>
           </div>
         </dl>
+        {promoCode && (promo.data || promo.isPending) ? (
+          <div className="flex items-center justify-between gap-3 rounded-xl bg-shop-ok-tint px-3.5 py-2.5 text-sm">
+            <span className="text-shop-ok">
+              Promo kod <strong>{promoCode}</strong>
+              {promo.data?.description && ` — ${promo.data.description}`}
+            </span>
+            <button
+              type="button"
+              onClick={() => {
+                setPromoCode(null);
+                setPromoInput("");
+              }}
+              className="shrink-0 font-semibold text-shop-muted hover:text-shop-sale"
+            >
+              Ukloni
+            </button>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-1.5">
+            <div className="flex gap-2">
+              <input
+                value={promoInput}
+                onChange={(e) => setPromoInput(e.target.value.toUpperCase())}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    if (promoInput.trim()) setPromoCode(promoInput.trim());
+                  }
+                }}
+                aria-label="Promo kod"
+                placeholder="Promo kod"
+                maxLength={40}
+                className="h-11 min-w-0 grow rounded-xl border-[1.5px] border-shop-field px-3 text-[15px] uppercase outline-none focus:border-shop-blue"
+              />
+              <button
+                type="button"
+                disabled={!promoInput.trim()}
+                onClick={() => setPromoCode(promoInput.trim())}
+                className="h-11 rounded-xl border-[1.5px] border-shop-blue px-4 font-bold text-shop-blue disabled:opacity-50"
+              >
+                Primijeni
+              </button>
+            </div>
+            {promoCode && promo.error && (
+              <span role="alert" className="text-sm font-semibold text-shop-sale">
+                {promo.error instanceof ApiError ? promo.error.message : "Promo kod trenutno ne može da se provjeri."}
+              </span>
+            )}
+          </div>
+        )}
         <div className="flex items-baseline justify-between border-t border-[#e6ecf5] pt-4">
           <span className="text-[17px] font-bold">Ukupno</span>
           <span className="font-display text-3xl font-bold tracking-tight">{money(total)}</span>

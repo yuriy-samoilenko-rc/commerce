@@ -71,6 +71,14 @@ export type ErrorCode =
   | 'REVIEW_EXISTS'
   | 'WRONG_PASSWORD'
   | 'RESET_TOKEN_INVALID'
+  | 'PRODUCT_IN_STOCK'
+  | 'PROMO_INVALID'
+  | 'PROMO_USED_UP'
+  | 'PROMO_ALREADY_USED'
+  | 'PROMO_MIN_SUBTOTAL'
+  | 'PROMO_NOT_APPLICABLE'
+  | 'PROMO_PERCENT'
+  | 'PROMO_DATES'
   | 'DOCUMENT_EMPTY';
 
 export type ErrorParams = Record<string, string | number>;

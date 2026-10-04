@@ -7,13 +7,13 @@ import { PriceTag, SaleBadge, Stars } from "@/components/shop/bits";
 import { CountdownLine } from "@/components/shop/countdown";
 import { categoryHref, productHref } from "@/lib/shop-links";
 import { ProductCard } from "@/components/shop/product-card";
-import type { PublicProductDetail, Recommendations, ReviewEligibility, ReviewPage } from "@/lib/backend-types";
+import type { PublicProductDetail, QuestionPage, Recommendations, ReviewEligibility, ReviewPage } from "@/lib/backend-types";
 import { date, money } from "@/lib/format";
 import { isUuid } from "@/lib/ids";
 import { categoryPath, currentCustomer, publicApi, shopCategories, shopInfo } from "@/lib/shop-api";
 import { priceOf } from "@/lib/shop-price";
 import { apiServer } from "@/lib/session";
-import { Bundle, BuyBox, Gallery, ReviewForm, StickyBuyBar } from "./product-parts";
+import { AskQuestion, Bundle, BuyBox, Gallery, ReviewForm, StickyBuyBar } from "./product-parts";
 
 /**
  * By slug; an old address with the product id moves permanently to the slug one, so
@@ -55,9 +55,10 @@ export async function generateMetadata({ params }: PageProps<"/proizvod/[slug]">
 export default async function ProductPage({ params }: PageProps<"/proizvod/[slug]">) {
   const product = await loadProduct((await params).slug);
   const id = product.id;
-  const [recs, reviews, info, categories, customer] = await Promise.all([
+  const [recs, reviews, questions, info, categories, customer] = await Promise.all([
     publicApi<Recommendations>(`/products/${id}/recommendations`),
     publicApi<ReviewPage>(`/products/${id}/reviews?limit=5`),
+    publicApi<QuestionPage>(`/products/${id}/questions?limit=20`),
     shopInfo(),
     shopCategories(),
     currentCustomer(),
@@ -307,6 +308,46 @@ export default async function ProductPage({ params }: PageProps<"/proizvod/[slug
           {!reviews?.items.length && (
             <div className="flex h-full min-h-40 items-center justify-center rounded-3xl border border-dashed border-shop-field bg-white p-8 text-center text-shop-muted">
               Budite prvi koji će ocijeniti ovaj proizvod nakon kupovine.
+            </div>
+          )}
+        </div>
+      </section>
+
+      <section id="pitanja" aria-label="Pitanja i odgovori" className="grid scroll-mt-6 gap-6 lg:grid-cols-12">
+        <div className="flex flex-col gap-4 rounded-3xl border border-shop-line bg-white p-6 md:p-8 lg:col-span-4">
+          <h2 className="font-display text-2xl font-bold tracking-tight">Pitanja i odgovori</h2>
+          <p className="text-[15px] text-shop-muted">
+            Imate pitanje o proizvodu? Odgovor vam šaljemo emailom i objavljujemo ga ovdje.
+          </p>
+          {customer ? (
+            <AskQuestion productId={product.id} />
+          ) : (
+            <Link
+              href={`/nalog/prijava?next=${encodeURIComponent(productHref(product))}`}
+              className="flex h-12 items-center justify-center rounded-xl border-[1.5px] border-shop-blue font-bold text-shop-blue hover:bg-shop-tint"
+            >
+              Prijavite se da postavite pitanje
+            </Link>
+          )}
+        </div>
+        <div className="flex flex-col gap-4 lg:col-span-8">
+          {questions?.items.map((q) => (
+            <article key={q.id} className="flex flex-col gap-3 rounded-3xl border border-shop-line bg-white p-6 md:p-7">
+              <div className="flex flex-col gap-1">
+                <span className="text-[13px] text-shop-muted">
+                  {q.author} · {date(q.createdAt)}
+                </span>
+                <p className="text-[15px] font-semibold whitespace-pre-line">{q.question}</p>
+              </div>
+              <div className="flex gap-3 rounded-2xl bg-shop-tint p-4">
+                <span className="shrink-0 font-display font-bold text-shop-blue">TechStore:</span>
+                <p className="text-[15px] leading-relaxed whitespace-pre-line text-shop-body">{q.answer}</p>
+              </div>
+            </article>
+          ))}
+          {!questions?.items.length && (
+            <div className="flex h-full min-h-32 items-center justify-center rounded-3xl border border-dashed border-shop-field bg-white p-8 text-center text-shop-muted">
+              Još nema pitanja o ovom proizvodu.
             </div>
           )}
         </div>

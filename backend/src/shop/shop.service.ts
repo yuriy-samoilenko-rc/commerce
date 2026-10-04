@@ -74,6 +74,84 @@ export class ShopService {
     };
   }
 
+  /**
+   * Suggestions while typing in the search box: a few products (names starting with
+   * the text first, then those in stock), plus matching categories and brands.
+   */
+  async suggest(q: string) {
+    const text = q.trim();
+    if (text.length < 2) return { products: [], categories: [], brands: [] };
+    const contains = { contains: text, mode: 'insensitive' as const };
+    const [rows, categories, brands] = await Promise.all([
+      this.prisma.product.findMany({
+        where: {
+          isArchived: false,
+          OR: [
+            { name: contains },
+            { sku: contains },
+            { model: contains },
+            { brand: { name: contains } },
+          ],
+        },
+        select: {
+          id: true,
+          name: true,
+          slug: true,
+          shopPrice: true,
+          sellingPrice: true,
+          discountPrice: true,
+          brand: { select: { name: true } },
+          images: {
+            orderBy: { position: 'asc' },
+            take: 1,
+            select: {
+              id: true,
+              fileKey: true,
+              width: true,
+              height: true,
+              alt: true,
+              position: true,
+            },
+          },
+          stock: {
+            where: {
+              warehouse: { isActive: true },
+              quantity: { gt: this.prisma.stock.fields.reserved },
+            },
+            select: { id: true },
+            take: 1,
+          },
+        },
+        take: 40,
+      }),
+      this.prisma.category.findMany({
+        where: { name: contains },
+        select: { id: true, name: true, slug: true },
+        orderBy: { name: 'asc' },
+        take: 4,
+      }),
+      this.prisma.brand.findMany({
+        where: { name: contains, products: { some: { isArchived: false } } },
+        select: { id: true, name: true },
+        orderBy: { name: 'asc' },
+        take: 4,
+      }),
+    ]);
+    const lower = text.toLowerCase();
+    const score = (p: (typeof rows)[number]) =>
+      (p.name.toLowerCase().startsWith(lower) ? 0 : 2) +
+      (p.stock.length ? 0 : 1);
+    const products = rows
+      .sort((a, b) => score(a) - score(b) || a.name.localeCompare(b.name))
+      .slice(0, 6)
+      .map(({ images, stock, ...p }) => ({
+        ...p,
+        inStock: stock.length > 0,
+        thumbUrl: images[0] ? presentImage(images[0]).thumbUrl : null,
+      }));
+    return { products, categories, brands };
+  }
+
   async info() {
     const [s, pickupPoints] = await Promise.all([
       this.settings.get(),

@@ -1,4 +1,4 @@
-import { date } from "./format";
+import { date, money } from "./format";
 import { COUNT_STATUS, ORDER_STATUS, PAYMENT_STATUS, RETURN_STATUS, SERIAL_STATUS, TRANSFER_STATUS, WARRANTY_STATUS } from "./labels";
 
 /**
@@ -93,6 +93,14 @@ const CODED: Record<string, (p: Params) => string> = {
   REVIEW_NOT_ALLOWED: () => "Ocjenu mogu ostaviti samo kupci koji su ovaj proizvod primili.",
   REVIEW_EXISTS: () => "Već ste ocijenili ovaj proizvod.",
   WRONG_PASSWORD: () => "Trenutna lozinka nije ispravna.",
+  PROMO_INVALID: (p) => `Promo kod „${p.code}“ ne postoji ili više ne važi.`,
+  PROMO_USED_UP: () => "Ovaj promo kod je iskorišćen.",
+  PROMO_ALREADY_USED: () => "Ovaj promo kod ste već iskoristili.",
+  PROMO_MIN_SUBTOTAL: (p) => `Promo kod važi za kupovinu od najmanje ${money(p.min)}.`,
+  PROMO_NOT_APPLICABLE: () => "Promo kod ne važi za proizvode na akciji.",
+  PROMO_PERCENT: () => "Procenat popusta ne može biti veći od 100.",
+  PROMO_DATES: () => "Kraj važenja mora biti posle početka.",
+  PRODUCT_IN_STOCK: () => "Proizvod je već na stanju — možete ga odmah poručiti.",
   RESET_TOKEN_INVALID: () => "Ovaj link za novu lozinku je već iskorišćen ili je istekao.",
 };
 

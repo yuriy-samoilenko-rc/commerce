@@ -41,8 +41,9 @@ export default async function BuyingInfoPage() {
       <section id="povracaj" className={section}>
         <h2 className={h2}>Povraćaj robe</h2>
         <p className={p}>
-          Proizvod možete vratiti u roku od {info?.returnWindowDays ?? 14} dana od preuzimanja. Donesite ga u prodavnicu
-          ili nam se javite telefonom ili emailom; novac vraćamo nakon pregleda robe.
+          Proizvod možete vratiti u roku od {info?.returnWindowDays ?? 14} dana od preuzimanja. Zahtjev podnesite u svom
+          nalogu, na stranici narudžbe („Vrati proizvod“), ili nam se javite; robu donesite u prodavnicu, a novac vraćamo
+          nakon pregleda robe.
         </p>
       </section>
       <section id="garancija" className={section}>

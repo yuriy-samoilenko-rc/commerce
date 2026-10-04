@@ -77,6 +77,12 @@ export class CheckoutDto {
   @IsEnum(PaymentMethod)
   paymentMethod: PaymentMethod;
 
+  /** Promo code for a discount on the goods (checked and counted when the order is placed). */
+  @IsOptional()
+  @IsString()
+  @MaxLength(40)
+  promoCode?: string;
+
   @IsOptional()
   @IsString()
   @MaxLength(1000)

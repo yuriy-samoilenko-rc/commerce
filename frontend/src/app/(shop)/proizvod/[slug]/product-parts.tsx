@@ -88,9 +88,7 @@ export function BuyBox({ product }: { product: PublicProduct }) {
           </button>
         </div>
       ) : (
-        <p className="rounded-2xl bg-shop-ground p-4 text-[15px] text-shop-muted">
-          Proizvod trenutno nije na stanju. Dodajte ga na listu želja i vratite se uskoro.
-        </p>
+        <StockAlertForm productId={product.id} />
       )}
       <div className="flex gap-3">
         <button
@@ -298,5 +296,100 @@ export function StickyBuyBar({ product }: { product: PublicProduct }) {
         <ShoppingCart className="size-5" /> Dodaj u korpu
       </button>
     </div>
+  );
+}
+
+/** Out of stock: leave an email and get one message when the product is back. */
+function StockAlertForm({ productId }: { productId: string }) {
+  const { customer } = useShop();
+  const [done, setDone] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  if (done)
+    return (
+      <p role="status" className="rounded-2xl bg-shop-ok-tint p-4 text-[15px] text-shop-body">
+        Javićemo vam na <strong>{done}</strong> čim proizvod stigne.
+      </p>
+    );
+  return (
+    <form
+      className="flex flex-col gap-3 rounded-2xl bg-shop-ground p-4"
+      action={async (form) => {
+        const email = String(form.get("email") ?? "").trim();
+        setBusy(true);
+        try {
+          await api(`/products/${productId}/stock-alerts`, { method: "POST", json: { email } });
+          setDone(email);
+        } catch (e) {
+          toast.error(e instanceof ApiError ? e.message : "Prijava trenutno nije moguća.");
+        } finally {
+          setBusy(false);
+        }
+      }}
+    >
+      <strong className="text-[15px]">Proizvod trenutno nije na stanju</strong>
+      <span className="text-sm text-shop-muted">Ostavite email i poslaćemo vam jednu poruku kada stigne.</span>
+      <div className="flex flex-col gap-2.5 sm:flex-row">
+        <input
+          name="email"
+          type="email"
+          required
+          defaultValue={customer?.email ?? ""}
+          aria-label="Email za obavještenje"
+          placeholder="vas@email.me"
+          autoComplete="email"
+          className="h-12 min-w-0 grow rounded-xl border-[1.5px] border-shop-field bg-white px-3.5 text-[15px] outline-none focus:border-shop-blue"
+        />
+        <button type="submit" disabled={busy} className="h-12 rounded-xl bg-shop-blue px-5 font-bold whitespace-nowrap text-white hover:bg-shop-blue-dark disabled:opacity-60">
+          Obavijesti me kada stigne
+        </button>
+      </div>
+    </form>
+  );
+}
+
+/** A logged-in customer asks; the shop answers in the admin and the customer gets an email. */
+export function AskQuestion({ productId }: { productId: string }) {
+  const [sent, setSent] = useState(false);
+  const [busy, setBusy] = useState(false);
+  if (sent)
+    return (
+      <p role="status" className="rounded-2xl bg-shop-ok-tint p-4 text-sm font-semibold text-shop-ok">
+        Hvala! Pitanje je poslato — odgovor stiže na vaš email.
+      </p>
+    );
+  return (
+    <form
+      className="flex flex-col gap-3"
+      action={async (form) => {
+        setBusy(true);
+        try {
+          await api(`/products/${productId}/questions`, {
+            method: "POST",
+            json: { question: String(form.get("question") ?? "").trim() },
+          });
+          setSent(true);
+        } catch (e) {
+          toast.error(e instanceof ApiError ? e.message : "Pitanje trenutno ne može da se pošalje.");
+        } finally {
+          setBusy(false);
+        }
+      }}
+    >
+      <label className="flex flex-col gap-1.5 text-sm font-semibold">
+        Vaše pitanje
+        <textarea
+          name="question"
+          required
+          minLength={10}
+          maxLength={1000}
+          rows={3}
+          placeholder="Npr. da li uz telefon dolazi punjač?"
+          className="rounded-xl border-[1.5px] border-shop-field p-3 text-[15px] font-normal outline-none focus:border-shop-blue"
+        />
+      </label>
+      <button type="submit" disabled={busy} className="h-12 rounded-xl bg-shop-blue font-bold text-white hover:bg-shop-blue-dark disabled:opacity-60">
+        Pošalji pitanje
+      </button>
+    </form>
   );
 }

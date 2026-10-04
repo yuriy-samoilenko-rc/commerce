@@ -159,3 +159,21 @@ export const REVIEW_STATUS: Record<"PENDING" | "APPROVED" | "REJECTED", string> 
   APPROVED: "Objavljena",
   REJECTED: "Odbijena",
 };
+
+/** Return reasons in the customer's words (the shop). */
+export const CUSTOMER_RETURN_REASON: Record<string, string> = {
+  CHANGED_MIND: "Predomislio/la sam se",
+  DEFECTIVE: "Proizvod ne radi ispravno",
+  DAMAGED: "Oštećen pri isporuci",
+  WRONG_ITEM: "Stigao je pogrešan proizvod",
+  OTHER: "Drugo",
+};
+
+/** Order statuses from which the customer can ask for a return. */
+export const RETURNABLE_ORDER = ["DELIVERED", "COMPLETED", "PARTIALLY_RETURNED"];
+
+export const QUESTION_STATUS: Record<"PENDING" | "PUBLISHED" | "HIDDEN", string> = {
+  PENDING: "Čeka odgovor",
+  PUBLISHED: "Objavljeno",
+  HIDDEN: "Sakriveno",
+};
