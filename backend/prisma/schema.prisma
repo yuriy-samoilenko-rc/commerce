@@ -207,17 +207,21 @@ model Warehouse {
 }
 
 model Supplier {
-  id            String   @id @default(uuid())
-  name          String   @unique
-  taxId         String?
-  phone         String?
-  email         String?
-  address       String?
-  contactPerson String?
-  notes         String?
-  isActive      Boolean  @default(true)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id             String    @id @default(uuid())
+  name           String    @unique
+  taxId          String?
+  phone          String?
+  email          String?
+  address        String?
+  contactPerson  String?
+  notes          String?
+  // bank account (žiro račun) and the purchase contract
+  bankAccount    String?
+  contractNumber String?
+  contractUntil  DateTime? @db.Date
+  isActive       Boolean   @default(true)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
   receivings Receiving[]
   documents  Document[]

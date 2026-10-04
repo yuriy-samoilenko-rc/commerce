@@ -32,15 +32,19 @@ export class SuppliersController {
     return this.suppliers.findOne(id);
   }
 
-  @Roles(Role.ADMIN)
+  // The manager handles purchasing too; deleting stays with the admin.
+  @Roles(Role.ADMIN, Role.MANAGER)
   @Post()
   create(@Body() dto: CreateSupplierDto) {
     return this.suppliers.create(dto);
   }
 
-  @Roles(Role.ADMIN)
+  @Roles(Role.ADMIN, Role.MANAGER)
   @Patch(':id')
-  update(@Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateSupplierDto) {
+  update(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateSupplierDto,
+  ) {
     return this.suppliers.update(id, dto);
   }
 

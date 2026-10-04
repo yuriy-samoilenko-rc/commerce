@@ -209,7 +209,7 @@ export class AuthService {
   }
 
   private async issueToken(user: PublicUser) {
-    const payload: JwtPayload = { sub: user.id };
+    const payload: JwtPayload = { sub: user.id, iatMs: Date.now() };
     return { accessToken: await this.jwt.signAsync(payload), user };
   }
 }

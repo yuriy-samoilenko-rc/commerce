@@ -65,6 +65,7 @@ export type CustomerList = Returns<UsersService["listCustomers"]>;
 export type Customer = CustomerList["items"][number];
 export type WarehouseList = Returns<WarehousesService["findAll"]>;
 export type SupplierList = Returns<SuppliersService["findAll"]>;
+export type SupplierCard = Returns<SuppliersService["findOne"]>;
 export type ReceivingList = Returns<ReceivingsService["list"]>;
 export type Receiving = Returns<ReceivingsService["findOne"]>;
 export type DocumentList = Returns<DocumentsService["list"]>;

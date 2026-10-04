@@ -1,4 +1,12 @@
-import { IsBoolean, IsEmail, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
+import {
+  IsBoolean,
+  IsDateString,
+  IsEmail,
+  IsOptional,
+  IsString,
+  MaxLength,
+  MinLength,
+} from 'class-validator';
 
 export class CreateSupplierDto {
   @IsString()
@@ -34,6 +42,22 @@ export class CreateSupplierDto {
   @IsString()
   @MaxLength(2000)
   notes?: string | null;
+
+  /** Žiro račun */
+  @IsOptional()
+  @IsString()
+  @MaxLength(50)
+  bankAccount?: string | null;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  contractNumber?: string | null;
+
+  /** Last day the purchase contract is valid, YYYY-MM-DD */
+  @IsOptional()
+  @IsDateString({ strict: true })
+  contractUntil?: string | null;
 
   @IsOptional()
   @IsBoolean()

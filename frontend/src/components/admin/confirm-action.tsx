@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/dialog";
 import { api, ApiError } from "@/lib/api";
 
-/** A button that asks first, then POSTs to `path` and refreshes the page. */
+/** A button that asks first, then POSTs (or `method`) to `path` and refreshes the page. */
 export function ConfirmAction({
   path,
   label,
@@ -23,6 +23,8 @@ export function ConfirmAction({
   description,
   done,
   destructive,
+  method = "POST",
+  then,
 }: {
   path: string;
   label: string;
@@ -31,6 +33,9 @@ export function ConfirmAction({
   /** Toast after success. */
   done: string;
   destructive?: boolean;
+  method?: "POST" | "DELETE";
+  /** Where to go after success instead of refreshing (e.g. the list after a delete). */
+  then?: string;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -39,10 +44,11 @@ export function ConfirmAction({
   async function run() {
     setBusy(true);
     try {
-      await api(path, { method: "POST" });
+      await api(path, { method });
       toast.success(done);
       setOpen(false);
-      router.refresh();
+      if (then) router.push(then);
+      else router.refresh();
     } catch (e) {
       toast.error(e instanceof ApiError ? e.message : "Došlo je do greške. Pokušajte ponovo.");
       // Somebody else may have changed the document meanwhile.

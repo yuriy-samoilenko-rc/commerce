@@ -81,7 +81,8 @@ export type ErrorCode =
   | 'PROMO_DATES'
   | 'DOCUMENT_EMPTY'
   | 'OWN_ACCOUNT'
-  | 'STAFF_ROLE';
+  | 'STAFF_ROLE'
+  | 'SUPPLIER_IN_USE';
 
 export type ErrorParams = Record<string, string | number>;
 

@@ -99,9 +99,12 @@ const CODED: Record<string, (p: Params) => string> = {
   PROMO_MIN_SUBTOTAL: (p) => `Promo kod važi za kupovinu od najmanje ${money(p.min)}.`,
   PROMO_NOT_APPLICABLE: () => "Promo kod ne važi za proizvode na akciji.",
   PROMO_PERCENT: () => "Procenat popusta ne može biti veći od 100.",
-  PROMO_DATES: () => "Kraj važenja mora biti posle početka.",
+  PROMO_DATES: () => "Kraj važenja mora biti poslije početka.",
   PRODUCT_IN_STOCK: () => "Proizvod je već na stanju — možete ga odmah poručiti.",
   RESET_TOKEN_INVALID: () => "Ovaj link za novu lozinku je već iskorišćen ili je istekao.",
+  OWN_ACCOUNT: () => "Ne možete deaktivirati svoj nalog niti sebi promijeniti ulogu.",
+  STAFF_ROLE: () => "Nalog kupca ne može postati nalog zaposlenog, niti obrnuto.",
+  SUPPLIER_IN_USE: () => "Dobavljač ima prijeme ili dokumente, pa se ne može obrisati — deaktivirajte ga.",
 };
 
 const FALLBACK: Record<number, string> = {

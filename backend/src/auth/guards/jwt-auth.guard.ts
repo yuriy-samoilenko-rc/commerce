@@ -45,11 +45,13 @@ export class JwtAuthGuard implements CanActivate {
       select: { ...publicUserSelect, passwordChangedAt: true },
     });
     if (!found || !found.isActive) throw new UnauthorizedException();
-    // A password reset ends every session that existed before it.
+    // A password change ends every session that existed before it; tokens from
+    // before `iatMs` existed fall back to whole seconds.
     const { passwordChangedAt, ...user } = found;
     if (
       passwordChangedAt &&
-      (payload.iat ?? 0) * 1000 + 999 < passwordChangedAt.getTime()
+      (payload.iatMs ?? (payload.iat ?? 0) * 1000 + 999) <
+        passwordChangedAt.getTime()
     ) {
       throw new UnauthorizedException();
     }

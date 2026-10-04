@@ -56,11 +56,9 @@ export function EmployeeDialog({ employee, self = false }: { employee?: User; se
         e instanceof ApiError
           ? e.code === "DUPLICATE"
             ? "Nalog sa ovom e-poštom već postoji."
-            : e.code === "OWN_ACCOUNT"
-              ? "Ne možete deaktivirati svoj nalog niti sebi promijeniti ulogu."
-              : e.status === 400 && !e.code
-                ? "Provjerite unesene podatke (ispravna e-pošta, lozinka 8–72 znaka)."
-                : e.message
+            : e.status === 400 && !e.code
+              ? "Provjerite unesene podatke (ispravna e-pošta, lozinka 8–72 znaka)."
+              : e.message
           : "Došlo je do greške. Pokušajte ponovo.",
       );
     } finally {
