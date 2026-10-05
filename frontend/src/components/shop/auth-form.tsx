@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { api } from "@/lib/api";
 import { guestWishlistStore } from "@/lib/shop-store";
 import { cn } from "@/lib/utils";
+import { submitTo } from "@/lib/form";
 
 const field =
   "h-12 w-full rounded-xl border-[1.5px] border-shop-field bg-white px-3.5 text-[15px] text-shop-ink outline-none focus:border-shop-blue";
@@ -78,7 +79,7 @@ export function AuthForm({ initial = "login", next }: { initial?: "login" | "reg
           </button>
         ))}
       </div>
-      <form action={submit} className="flex flex-col gap-4">
+      <form onSubmit={submitTo(submit)} className="flex flex-col gap-4">
         {mode === "register" && (
           <label className="flex flex-col gap-1.5 text-sm font-semibold">
             Ime i prezime

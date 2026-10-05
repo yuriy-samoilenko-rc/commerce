@@ -16,6 +16,7 @@ import {
 import { Label } from "@/components/ui/label";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { api, ApiError } from "@/lib/api";
+import { submitTo } from "@/lib/form";
 
 /**
  * Deletes a category or a brand. When something still uses it (`inUse`), the
@@ -73,13 +74,7 @@ export function DeleteDialog({
       </Button>
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="sm:max-w-md">
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              void run(new FormData(e.currentTarget));
-            }}
-            className="flex flex-col gap-4"
-          >
+          <form onSubmit={submitTo(run)} className="flex flex-col gap-4">
             <DialogHeader>
               <DialogTitle>{title}</DialogTitle>
               <DialogDescription>

@@ -4,7 +4,7 @@ import * as bcrypt from 'bcryptjs';
 import { createHash, randomBytes } from 'node:crypto';
 import { MailService } from '../mail/mail.service';
 import { AuditService } from '../audit/audit.service';
-import { Role } from '../generated/prisma/client';
+import { Prisma, Role } from '../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { badRequest } from '../common/errors';
 import { shopUrl } from '../common/shop-url';
@@ -23,6 +23,7 @@ import { RegisterDto } from './dto/register.dto';
 import { JwtPayload } from './jwt-payload';
 
 const RESET_MINUTES = 60;
+const INVITE_DAYS = 7;
 const hashToken = (token: string) =>
   createHash('sha256').update(token).digest('hex');
 
@@ -146,29 +147,49 @@ export class AuthService {
     });
     if (recent) return;
 
-    const token = randomBytes(32).toString('base64url');
-    const link = `${shopUrl()}/nalog/nova-lozinka?token=${token}`;
-    await this.prisma.$transaction(async (tx) => {
-      // Only the newest link works.
-      await tx.passwordResetToken.updateMany({
-        where: { userId: user.id, usedAt: null },
-        data: { usedAt: new Date() },
-      });
-      await tx.passwordResetToken.create({
-        data: {
-          userId: user.id,
-          tokenHash: hashToken(token),
-          expiresAt: new Date(Date.now() + RESET_MINUTES * 60_000),
-        },
-      });
-      await this.mail.passwordResetEmail(tx, user, link, RESET_MINUTES);
-    });
+    await this.sendPasswordLink(user.id, RESET_MINUTES, (tx, link) =>
+      this.mail.passwordResetEmail(tx, user, link, RESET_MINUTES),
+    );
     await this.audit.write({
       action: 'auth.password_reset_requested',
       entityType: 'users',
       entityId: user.id,
       statusCode: 204,
       userId: user.id,
+    });
+  }
+
+  /**
+   * Emails a customer whose account a manager made a link to set the first password.
+   * It works like a reset link, only longer: people do not read shop mail at once.
+   */
+  async inviteCustomer(user: { id: string; email: string; name: string }) {
+    await this.sendPasswordLink(user.id, INVITE_DAYS * 24 * 60, (tx, link) =>
+      this.mail.accountCreatedEmail(tx, user, link, INVITE_DAYS),
+    );
+  }
+
+  /** A one-time link to /nalog/nova-lozinka; only the newest link of a user works. */
+  private async sendPasswordLink(
+    userId: string,
+    minutes: number,
+    send: (tx: Prisma.TransactionClient, link: string) => Promise<void>,
+  ) {
+    const token = randomBytes(32).toString('base64url');
+    const link = `${shopUrl()}/nalog/nova-lozinka?token=${token}`;
+    await this.prisma.$transaction(async (tx) => {
+      await tx.passwordResetToken.updateMany({
+        where: { userId, usedAt: null },
+        data: { usedAt: new Date() },
+      });
+      await tx.passwordResetToken.create({
+        data: {
+          userId,
+          tokenHash: hashToken(token),
+          expiresAt: new Date(Date.now() + minutes * 60_000),
+        },
+      });
+      await send(tx, link);
     });
   }
 

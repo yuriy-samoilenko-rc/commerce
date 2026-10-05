@@ -3,8 +3,6 @@ import * as bcrypt from 'bcryptjs';
 import { Prisma, Role } from '../generated/prisma/client';
 import { AuditService, changedKeys } from '../audit/audit.service';
 import { badRequest } from '../common/errors';
-import { pageArgs } from '../common/dto/pagination-query.dto';
-import { CustomerQueryDto } from './dto/customer-query.dto';
 import { PrismaService } from '../prisma/prisma.service';
 
 // passwordHash never leaves the service: every read goes through this select.
@@ -52,7 +50,7 @@ export class UsersService {
     });
   }
 
-  /** Employees only; customer accounts have their own list (`listCustomers`). */
+  /** Employees only; customer accounts are listed by CustomersService. */
   findAll(): Promise<PublicUser[]> {
     return this.prisma.user.findMany({
       where: { role: { not: Role.CUSTOMER } },
@@ -68,47 +66,6 @@ export class UsersService {
     });
     if (!user) throw new NotFoundException('User not found');
     return user;
-  }
-
-  /**
-   * Customer accounts with the contact details of their latest order: users have no
-   * phone or address of their own, so that is where a manager finds them.
-   */
-  async listCustomers(q: CustomerQueryDto) {
-    const where: Prisma.UserWhereInput = { role: Role.CUSTOMER };
-    const search = q.search?.trim();
-    if (search) {
-      const contains = { contains: search, mode: 'insensitive' as const };
-      where.OR = [{ name: contains }, { email: contains }];
-    }
-    const [rows, total] = await this.prisma.$transaction([
-      this.prisma.user.findMany({
-        where,
-        select: {
-          id: true,
-          name: true,
-          email: true,
-          isActive: true,
-          createdAt: true,
-          ordersPlaced: {
-            select: { customerPhone: true, deliveryAddress: true },
-            orderBy: { createdAt: 'desc' },
-            take: 1,
-          },
-          _count: { select: { ordersPlaced: true } },
-        },
-        orderBy: { name: 'asc' },
-        ...pageArgs(q),
-      }),
-      this.prisma.user.count({ where }),
-    ]);
-    const items = rows.map(({ ordersPlaced, _count, ...c }) => ({
-      ...c,
-      phone: ordersPlaced[0]?.customerPhone ?? null,
-      address: ordersPlaced[0]?.deliveryAddress ?? null,
-      orderCount: _count.ordersPlaced,
-    }));
-    return { items, total, page: q.page, limit: q.limit };
   }
 
   findByEmailWithPassword(email: string) {

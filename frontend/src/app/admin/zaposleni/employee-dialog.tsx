@@ -19,6 +19,7 @@ import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
 import { api, ApiError } from "@/lib/api";
 import type { User } from "@/lib/backend-types";
 import { ROLE, STAFF_ROLES } from "@/lib/labels";
+import { submitTo } from "@/lib/form";
 
 /**
  * Adds an employee, or edits one when given. The admin's own account (`self`) keeps
@@ -80,7 +81,7 @@ export function EmployeeDialog({ employee, self = false }: { employee?: User; se
       </Button>
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="sm:max-w-md">
-          <form action={save} className="flex flex-col gap-4">
+          <form onSubmit={submitTo(save)} className="flex flex-col gap-4">
             <DialogHeader>
               <DialogTitle>{employee ? employee.name : "Novi zaposleni"}</DialogTitle>
               <DialogDescription>

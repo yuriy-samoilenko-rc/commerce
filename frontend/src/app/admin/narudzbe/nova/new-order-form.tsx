@@ -52,10 +52,13 @@ interface Line {
 const price = (p: StaffProduct) => p.discountPrice ?? p.sellingPrice;
 const cents = (value: string) => Math.round(Number(value) * 100);
 
-export function NewOrderForm() {
+/** The account the order is linked to; a customer card can open the form with it chosen. */
+export type LinkedCustomer = Pick<Customer, "id" | "name" | "email" | "phone" | "address">;
+
+export function NewOrderForm({ initialCustomer }: { initialCustomer?: LinkedCustomer }) {
   const router = useRouter();
   const [lines, setLines] = useState<Line[]>([]);
-  const [customer, setCustomer] = useState<Customer | null>(null);
+  const [customer, setCustomer] = useState<LinkedCustomer | null>(initialCustomer ?? null);
   const [error, setError] = useState<string | null>(null);
   const {
     register,
@@ -66,11 +69,11 @@ export function NewOrderForm() {
   } = useForm<Values>({
     resolver: zodResolver(schema),
     defaultValues: {
-      customerName: "",
-      customerPhone: "",
-      customerEmail: "",
+      customerName: initialCustomer?.name ?? "",
+      customerPhone: initialCustomer?.phone ?? "",
+      customerEmail: initialCustomer?.email ?? "",
       deliveryMethod: "PICKUP",
-      deliveryAddress: "",
+      deliveryAddress: initialCustomer?.address ?? "",
       paymentMethod: "CASH_ON_DELIVERY",
       comment: "",
     },
@@ -90,7 +93,7 @@ export function NewOrderForm() {
     );
   const remove = (id: string) => setLines((current) => current.filter((l) => l.product.id !== id));
 
-  function link(c: Customer) {
+  function link(c: LinkedCustomer) {
     setCustomer(c);
     // Contacts come from the account and its latest order; the manager can still edit them.
     setValue("customerName", c.name, { shouldValidate: true });
@@ -297,7 +300,7 @@ function CustomerSearch({ onPick }: { onPick: (c: Customer) => void }) {
                 <span className="font-medium">{c.name}</span>
                 <span className="text-xs text-muted-foreground">
                   {c.email}
-                  {c.phone && ` · ${c.phone}`} · narudžbi: {c.orderCount}
+                  {c.phone && ` · ${c.phone}`} · narudžbi: {c.orders}
                 </span>
               </button>
             </li>

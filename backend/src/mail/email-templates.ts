@@ -193,6 +193,22 @@ export function passwordReset(
   ]);
 }
 
+/** A manager made the account (e.g. for a phone customer); the customer sets the password. */
+export function accountCreated(
+  company: CompanySettings,
+  user: { name: string; email: string },
+  link: string,
+  days: number,
+): EmailContent {
+  return wrap(company, 'Vaš nalog u internet prodavnici', [
+    `Poštovani/a ${user.name},`,
+    `otvorili smo vam nalog u našoj internet prodavnici sa email adresom ${user.email}. U nalogu vidite svoje narudžbe, račune i garantne listove, a kupovina je brža jer su vaši podaci već upisani.`,
+    'Lozinku za prijavu postavljate na ovoj stranici:',
+    link,
+    `Link važi ${days} dana i može se iskoristiti samo jednom. Ako vam nalog ne treba, zanemarite ovu poruku.`,
+  ]);
+}
+
 export function backInStock(
   company: CompanySettings,
   product: { name: string },

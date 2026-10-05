@@ -135,7 +135,20 @@ export default async function OrderPage({ params }: PageProps<"/admin/narudzbe/[
                   ["Ime", order.customerName],
                   ["Telefon", <a key="t" href={`tel:${order.customerPhone}`} className="hover:underline">{order.customerPhone}</a>],
                   ["Email", order.customerEmail ?? "—"],
-                  ["Nalog", order.user ? `${order.user.name} (${order.user.email})` : "Bez naloga"],
+                  [
+                    "Nalog",
+                    order.user ? (
+                      user.role === "ADMIN" || user.role === "MANAGER" ? (
+                        <Link key="k" href={`/admin/kupci/${order.user.id}`} className="underline-offset-4 hover:underline">
+                          {order.user.name} ({order.user.email})
+                        </Link>
+                      ) : (
+                        `${order.user.name} (${order.user.email})`
+                      )
+                    ) : (
+                      "Bez naloga"
+                    ),
+                  ],
                 ]}
               />
             </CardContent>

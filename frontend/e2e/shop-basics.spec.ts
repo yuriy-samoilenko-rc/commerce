@@ -119,6 +119,20 @@ test.describe("shop basics", () => {
     await expect(page.getByRole("heading", { name: "Stranica nije pronađena" })).toBeVisible();
   });
 
+  test("a wrong password keeps the email typed, and the right one signs in", async ({ page }) => {
+    const customer = await createUser("CUSTOMER");
+    await page.goto("/nalog/prijava");
+    await page.getByLabel("Email").fill(customer.email);
+    await page.getByLabel("Lozinka", { exact: true }).fill("pogresna-lozinka");
+    await page.getByRole("button", { name: "Prijavi se" }).click();
+    await expect(page.getByRole("alert").filter({ hasText: /lozink/i })).toBeVisible();
+    // Only the password needs typing again.
+    await expect(page.getByLabel("Email")).toHaveValue(customer.email);
+    await page.getByLabel("Lozinka", { exact: true }).fill(customer.password);
+    await page.getByRole("button", { name: "Prijavi se" }).click();
+    await expectPath(page, "/nalog");
+  });
+
   test("legal pages and the cookie notice", async ({ page }) => {
     await page.goto("/");
     const notice = page.getByRole("region", { name: "Obavještenje o kolačićima" });

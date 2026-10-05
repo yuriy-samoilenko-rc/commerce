@@ -19,6 +19,7 @@ import { Label } from "@/components/ui/label";
 import { api, ApiError } from "@/lib/api";
 import type { CompanySettings, WarehouseList } from "@/lib/backend-types";
 import { decimalInput, parseDecimal } from "@/lib/format";
+import { submitTo } from "@/lib/form";
 
 const text = (form: FormData, name: string) => String(form.get(name) ?? "").trim() || null;
 
@@ -69,7 +70,7 @@ export function CompanyForm({ settings }: { settings: CompanySettings }) {
     }
   }
   return (
-    <form action={save} className="flex flex-col gap-4">
+    <form onSubmit={submitTo(save)} className="flex flex-col gap-4">
       <Card>
         <CardHeader>
           <CardTitle>Firma</CardTitle>
@@ -149,7 +150,7 @@ export function WarehouseDialog({ warehouse }: { warehouse?: Warehouse }) {
       </Button>
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent>
-          <form action={save} className="flex flex-col gap-4">
+          <form onSubmit={submitTo(save)} className="flex flex-col gap-4">
             <DialogHeader>
               <DialogTitle>{warehouse ? warehouse.name : "Novo skladište"}</DialogTitle>
               <DialogDescription>Adresu, telefon i radno vrijeme prodavnica prikazuje kupcima kod ličnog preuzimanja.</DialogDescription>

@@ -18,6 +18,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { api, ApiError } from "@/lib/api";
 import type { SupplierCard } from "@/lib/backend-types";
+import { submitTo } from "@/lib/form";
 
 type Editable = Pick<
   SupplierCard,
@@ -105,7 +106,7 @@ export function SupplierDialog({ supplier }: { supplier?: Editable }) {
       </Button>
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="sm:max-w-xl">
-          <form action={save} className="flex flex-col gap-4">
+          <form onSubmit={submitTo(save)} className="flex flex-col gap-4">
             <DialogHeader>
               <DialogTitle>{supplier ? supplier.name : "Novi dobavljač"}</DialogTitle>
               <DialogDescription>Obavezan je samo naziv; ostalo se može dopuniti kasnije.</DialogDescription>

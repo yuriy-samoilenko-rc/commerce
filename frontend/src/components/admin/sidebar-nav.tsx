@@ -1,6 +1,6 @@
 "use client";
 
-import { ChartColumn, ClipboardCheck, GalleryHorizontal, FolderTree, Handshake, UsersRound, FileText, LayoutDashboard, MessageCircleQuestion, Settings, Star, Store, TicketPercent, RotateCcw, ShieldCheck, Smartphone, Package, PackagePlus, ShoppingCart, Truck, Warehouse, type LucideIcon } from "lucide-react";
+import { ChartColumn, ClipboardCheck, Contact, GalleryHorizontal, FolderTree, Handshake, UsersRound, FileText, LayoutDashboard, MessageCircleQuestion, Settings, Star, Store, TicketPercent, RotateCcw, ShieldCheck, Smartphone, Package, PackagePlus, ShoppingCart, Truck, Warehouse, type LucideIcon } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { Role } from "@/lib/backend-types";
@@ -18,6 +18,7 @@ interface NavItem {
 const NAV: NavItem[] = [
   { href: "/admin", label: "Kontrolna tabla", icon: LayoutDashboard },
   { href: "/admin/narudzbe", label: "Narudžbe", icon: ShoppingCart },
+  { href: "/admin/kupci", label: "Kupci", icon: Contact, roles: ["ADMIN", "MANAGER"] },
   { href: "/admin/povracaji", label: "Povraćaji", icon: RotateCcw },
   { href: "/admin/garancija", label: "Garancija", icon: ShieldCheck },
   { href: "/admin/proizvodi", label: "Proizvodi", icon: Package },

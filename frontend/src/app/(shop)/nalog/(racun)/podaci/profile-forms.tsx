@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
 import { api, ApiError } from "@/lib/api";
+import { submitTo } from "@/lib/form";
 
 const field =
   "h-12 w-full rounded-xl border-[1.5px] border-shop-field bg-white px-3.5 text-[15px] font-normal text-shop-ink outline-none focus:border-shop-blue";
@@ -42,7 +43,7 @@ export function ProfileForm(props: { name: string; email: string; phone: string;
     router.refresh();
   });
   return (
-    <form action={action} className={card}>
+    <form onSubmit={submitTo(action)} className={card}>
       <h2 className="font-display text-xl font-bold">Podaci za narudžbe</h2>
       <div className="grid gap-4 md:grid-cols-2">
         <label className={label}>
@@ -101,7 +102,7 @@ export function PasswordForm() {
     setKey((k) => k + 1);
   });
   return (
-    <form key={key} action={action} className={card}>
+    <form key={key} onSubmit={submitTo(action)} className={card}>
       <h2 className="font-display text-xl font-bold">Promjena lozinke</h2>
       <div className="grid gap-4 md:grid-cols-3">
         <label className={label}>

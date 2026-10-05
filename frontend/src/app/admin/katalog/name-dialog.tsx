@@ -17,6 +17,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { api, ApiError } from "@/lib/api";
+import { submitTo } from "@/lib/form";
 
 /**
  * Creates or renames a category or a brand. With `parents` (categories) it also
@@ -86,14 +87,7 @@ export function NameDialog({
       </Button>
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="sm:max-w-md">
-          {/* onSubmit, not action: a form action resets the fields even when saving fails. */}
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              void save(new FormData(e.currentTarget));
-            }}
-            className="flex flex-col gap-4"
-          >
+          <form onSubmit={submitTo(save)} className="flex flex-col gap-4">
             <DialogHeader>
               <DialogTitle>{title}</DialogTitle>
               {description && <DialogDescription>{description}</DialogDescription>}

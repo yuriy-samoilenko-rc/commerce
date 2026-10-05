@@ -21,6 +21,7 @@ import {
   orderConfirmed,
   orderReceived,
   orderShipped,
+  accountCreated,
   passwordReset,
   questionAnswered,
   returnDecided,
@@ -94,6 +95,20 @@ export class MailService {
       db,
       user.email,
       passwordReset(company, user, link, minutes),
+    );
+  }
+
+  async accountCreatedEmail(
+    db: Db,
+    user: { email: string; name: string },
+    link: string,
+    days: number,
+  ) {
+    const company = await this.company.get(db);
+    await this.enqueue(
+      db,
+      user.email,
+      accountCreated(company, user, link, days),
     );
   }
 

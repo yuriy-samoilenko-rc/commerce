@@ -18,6 +18,7 @@ import { Label } from "@/components/ui/label";
 import { api, ApiError } from "@/lib/api";
 import type { Banner } from "@/lib/backend-types";
 import { BANNER_THEMES } from "@/lib/banner-themes";
+import { submitTo } from "@/lib/form";
 
 /** "2026-10-04T22:00:00Z" → "2026-10-05" for a date field (local day). */
 const dayInput = (iso: string | null | undefined) => {
@@ -100,14 +101,7 @@ export function BannerDialog({ banner }: { banner?: Banner }) {
       </Button>
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="sm:max-w-xl">
-          {/* onSubmit, not action: a form action resets the fields even when saving fails. */}
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              void save(new FormData(e.currentTarget));
-            }}
-            className="flex flex-col gap-4"
-          >
+          <form onSubmit={submitTo(save)} className="flex flex-col gap-4">
             <DialogHeader>
               <DialogTitle>{banner ? banner.title : "Novi baner"}</DialogTitle>
               <DialogDescription>Prikazuje se u velikom slajderu na početnoj stranici prodavnice.</DialogDescription>

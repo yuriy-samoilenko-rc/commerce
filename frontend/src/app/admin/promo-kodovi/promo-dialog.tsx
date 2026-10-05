@@ -19,6 +19,7 @@ import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
 import { api, ApiError } from "@/lib/api";
 import type { PromoCode } from "@/lib/backend-types";
 import { decimalInput, parseDecimal } from "@/lib/format";
+import { submitTo } from "@/lib/form";
 
 /** "2026-10-04T00:00:00Z" → "2026-10-04" for a date field (local day). */
 const dayInput = (iso: string | null | undefined) => {
@@ -94,7 +95,7 @@ export function PromoDialog({ promo }: { promo?: PromoCode }) {
       </Button>
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="sm:max-w-lg">
-          <form action={save} className="flex flex-col gap-4">
+          <form onSubmit={submitTo(save)} className="flex flex-col gap-4">
             <DialogHeader>
               <DialogTitle>{promo ? promo.code : "Novi promo kod"}</DialogTitle>
               <DialogDescription>Važi od početka prvog do kraja posljednjeg navedenog dana.</DialogDescription>
