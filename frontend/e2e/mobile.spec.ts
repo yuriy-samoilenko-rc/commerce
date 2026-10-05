@@ -26,7 +26,7 @@ test.describe("warehouse phone app", () => {
     const storekeeper = await createUser("WAREHOUSE");
     await openApp(page, storekeeper.email, storekeeper.password, o.warehouse.name);
 
-    await expect(page.getByRole("heading", { name: /^Dobr(o jutro|ar dan|o veče), E2E$/ })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /^(Dobro jutro|Dobar dan|Dobro veče), E2E$/ })).toBeVisible();
     await expect(page.getByRole("link", { name: "Sklapanje: 1" })).toBeVisible();
     await page.getByRole("link", { name: "Sklapanje: 1" }).click();
     await page.getByRole("link", { name: new RegExp(`Narudžba ${o.number}`) }).click();

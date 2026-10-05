@@ -33,8 +33,8 @@ export function DeleteDialog({
   title: string;
   /** What still uses it, in words; empty when nothing does. */
   inUse: string;
-  /** [id, label] pairs the products may move to. */
-  targets: [string, string][];
+  /** [id, label] pairs the products may move to (a function is called on open). */
+  targets: [string, string][] | (() => [string, string][]);
   targetLabel: string;
   done: string;
 }) {
@@ -73,7 +73,13 @@ export function DeleteDialog({
       </Button>
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="sm:max-w-md">
-          <form action={run} className="flex flex-col gap-4">
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              void run(new FormData(e.currentTarget));
+            }}
+            className="flex flex-col gap-4"
+          >
             <DialogHeader>
               <DialogTitle>{title}</DialogTitle>
               <DialogDescription>
@@ -87,7 +93,7 @@ export function DeleteDialog({
                   <NativeSelectOption value="" disabled>
                     Izaberite…
                   </NativeSelectOption>
-                  {targets.map(([id, label]) => (
+                  {(typeof targets === "function" ? targets() : targets).map(([id, label]) => (
                     <NativeSelectOption key={id} value={id}>
                       {label}
                     </NativeSelectOption>

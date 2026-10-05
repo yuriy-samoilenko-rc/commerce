@@ -1243,3 +1243,35 @@ model ProductQuestion {
   @@index([status, createdAt])
   @@map("product_questions")
 }
+
+// --- Shop home page banners (the big slider) ---
+
+enum BannerTheme {
+  NAVY
+  BLUE
+  INK
+  SKY
+}
+
+model Banner {
+  id         String      @id @default(uuid())
+  title      String
+  text       String?
+  // small label above the title, e.g. "AKCIJA"
+  badge      String?
+  buttonText String?
+  // shop path (/katalog/televizori) or a full https:// address
+  link       String
+  theme      BannerTheme @default(NAVY)
+  // media key of the picture (WebP), null = text only
+  imageKey   String?
+  position   Int         @default(0)
+  isActive   Boolean     @default(true)
+  startsAt   DateTime?
+  endsAt     DateTime?
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+
+  @@index([isActive, position])
+  @@map("banners")
+}

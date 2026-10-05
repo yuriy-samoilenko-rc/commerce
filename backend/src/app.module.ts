@@ -13,6 +13,7 @@ import { ReviewsModule } from './reviews/reviews.module';
 import { ShopModule } from './shop/shop.module';
 import { StockAlertsModule } from './stock-alerts/stock-alerts.module';
 import { PromoModule } from './promo/promo.module';
+import { BannersModule } from './banners/banners.module';
 import { QuestionsModule } from './questions/questions.module';
 import { WishlistModule } from './wishlist/wishlist.module';
 import { NotificationsModule } from './notifications/notifications.module';
@@ -59,6 +60,7 @@ import { WarrantyModule } from './warranty/warranty.module';
     WishlistModule,
     StockAlertsModule,
     PromoModule,
+    BannersModule,
     QuestionsModule,
   ],
   controllers: [AppController],

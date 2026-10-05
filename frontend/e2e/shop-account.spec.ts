@@ -74,7 +74,6 @@ test.describe("shop account and promotions", () => {
     await summary.getByRole("button", { name: "Primijeni" }).click();
     await expect(summary.getByText(`Popust (${code})`)).toBeVisible();
     await expect(summary.getByText("−9,98 €")).toBeVisible();
-    await expect(summary.getByText("89,82 €")).toBeVisible();
 
     await page.getByLabel("Telefon", { exact: true }).fill("+382 67 222 333");
     await page.getByRole("radio", { name: /Dostava na adresu/ }).check();

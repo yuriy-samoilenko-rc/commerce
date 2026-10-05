@@ -7,10 +7,11 @@ import { CountdownBoxes } from "@/components/shop/countdown";
 import { categoryHref } from "@/lib/shop-links";
 import { ProductCard } from "@/components/shop/product-card";
 import { productHref } from "@/lib/shop-links";
-import type { BrandList, PublicProductList } from "@/lib/backend-types";
+import type { BrandList, PublicProduct, PublicProductList, ShopBanners } from "@/lib/backend-types";
 import { money } from "@/lib/format";
 import { publicApi, shopCategories, shopInfo } from "@/lib/shop-api";
-import { HeroCarousel } from "./hero-carousel";
+import { priceOf } from "@/lib/shop-price";
+import { HeroCarousel, type Slide } from "./hero-carousel";
 
 export const metadata: Metadata = {
   title: { absolute: "TechStore — tehnika za dom i posao" },
@@ -34,18 +35,50 @@ function SectionHead({ title, href, link, children }: { title: string; href?: st
   );
 }
 
+const OFFER_THEMES = ["NAVY", "BLUE", "INK"] as const;
+
+function offerSlide(p: PublicProduct, i: number): Slide {
+  const price = priceOf(p);
+  return {
+    id: p.id,
+    badge: `${price.old ? "AKCIJA" : "NOVO"} · ${p.category.name}`,
+    title: p.name,
+    text: price.old !== null ? `Uštedite ${money(price.saving)} dok traju zalihe.` : null,
+    href: productHref(p),
+    button: "Pogledaj ponudu",
+    secondary: { href: "/katalog?akcija=1", label: "Sve akcije" },
+    theme: OFFER_THEMES[i % OFFER_THEMES.length],
+    image: p.images[0] ? { url: p.images[0].url, alt: p.images[0].alt ?? p.name } : null,
+    product: p,
+  };
+}
+
 export default async function HomePage() {
-  const [info, categories, sale, fresh, brands] = await Promise.all([
+  const [info, categories, sale, fresh, brands, banners] = await Promise.all([
     shopInfo(),
     shopCategories(),
     publicApi<PublicProductList>("/products?onSale=true&inStock=true&sort=price_desc&limit=12"),
     publicApi<PublicProductList>("/products?inStock=true&sort=newest&limit=4"),
     publicApi<BrandList>("/brands", 300),
+    publicApi<ShopBanners>("/shop/banners"),
   ]);
   const onSale = sale?.items ?? [];
   const pictured = onSale.filter((p) => p.images.length);
-  const slides = pictured.slice(0, 3);
-  const tiles = pictured.slice(3, 5);
+  // The admin's banners lead; without any, the best offers make the slider.
+  const slides: Slide[] = banners?.length
+    ? banners.map((b) => ({
+        id: b.id,
+        badge: b.badge,
+        title: b.title,
+        text: b.text,
+        href: b.link,
+        button: b.buttonText || "Pogledaj",
+        theme: b.theme,
+        image: b.imageUrl ? { url: b.imageUrl, alt: b.title } : null,
+        cover: true,
+      }))
+    : pictured.slice(0, 3).map(offerSlide);
+  const tiles = banners?.length ? pictured.slice(0, 2) : pictured.slice(3, 5);
   // The sale that ends first sets the countdown.
   const endsAt = onSale
     .map((p) => p.discountEndsAt)

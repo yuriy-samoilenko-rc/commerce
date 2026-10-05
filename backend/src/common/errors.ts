@@ -86,7 +86,9 @@ export type ErrorCode =
   | 'CATEGORY_NOT_EMPTY'
   | 'CATEGORY_CYCLE'
   | 'BRAND_IN_USE'
-  | 'MOVE_TO_INVALID';
+  | 'MOVE_TO_INVALID'
+  | 'BANNER_DATES'
+  | 'BANNER_ORDER';
 
 export type ErrorParams = Record<string, string | number>;
 

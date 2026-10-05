@@ -42,8 +42,8 @@ export function NameDialog({
   method: "POST" | "PATCH";
   name?: string;
   parentId?: string | null;
-  /** [id, indented name] pairs the category may be placed under. */
-  parents?: [string, string][];
+  /** [id, indented name] pairs the category may be placed under (a function is called on open). */
+  parents?: [string, string][] | (() => [string, string][]);
   done: string;
   duplicate: string;
   variant?: "default" | "outline" | "ghost";
@@ -86,7 +86,14 @@ export function NameDialog({
       </Button>
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="sm:max-w-md">
-          <form action={save} className="flex flex-col gap-4">
+          {/* onSubmit, not action: a form action resets the fields even when saving fails. */}
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              void save(new FormData(e.currentTarget));
+            }}
+            className="flex flex-col gap-4"
+          >
             <DialogHeader>
               <DialogTitle>{title}</DialogTitle>
               {description && <DialogDescription>{description}</DialogDescription>}
@@ -100,7 +107,7 @@ export function NameDialog({
                 <Label htmlFor="catalog-parent">Nadređena kategorija</Label>
                 <NativeSelect id="catalog-parent" name="parentId" defaultValue={parentId ?? ""}>
                   <NativeSelectOption value="">— glavna kategorija —</NativeSelectOption>
-                  {parents.map(([id, label]) => (
+                  {(typeof parents === "function" ? parents() : parents).map(([id, label]) => (
                     <NativeSelectOption key={id} value={id}>
                       {label}
                     </NativeSelectOption>

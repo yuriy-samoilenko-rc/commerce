@@ -14,6 +14,7 @@ import type { ProductImagesService } from "@backend/products/product-images.serv
 import type { UsersService } from "@backend/users/users.service";
 import type { CategoriesService } from "@backend/categories/categories.service";
 import type { BrandsService } from "@backend/brands/brands.service";
+import type { BannersService } from "@backend/banners/banners.service";
 import type { StockService } from "@backend/stock/stock.service";
 import type { WarehousesService } from "@backend/warehouses/warehouses.service";
 import type { SuppliersService } from "@backend/suppliers/suppliers.service";
@@ -60,6 +61,9 @@ export type CategoryTree = Returns<CategoriesService["findTree"]>;
 export type BrandList = Returns<BrandsService["findAll"]>;
 export type ManagedCategories = Returns<CategoriesService["manageTree"]>;
 export type ManagedBrands = Returns<BrandsService["manageList"]>;
+export type ShopBanners = Returns<BannersService["live"]>;
+export type BannerList = Returns<BannersService["list"]>;
+export type Banner = BannerList[number];
 export type StockList = Returns<StockService["listStock"]>;
 export type MovementList = Returns<StockService["listMovements"]>;
 export type UserList = Returns<UsersService["findAll"]>;

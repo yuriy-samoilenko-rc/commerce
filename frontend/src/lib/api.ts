@@ -109,6 +109,8 @@ const CODED: Record<string, (p: Params) => string> = {
   CATEGORY_CYCLE: () => "Kategorija ne može biti unutar same sebe ili svoje podkategorije.",
   BRAND_IN_USE: () => "Brend ima proizvode — izaberite brend u koji da se premjeste.",
   MOVE_TO_INVALID: () => "Izaberite drugu kategoriju ili brend za premještanje.",
+  BANNER_DATES: () => "Kraj prikazivanja mora biti poslije početka.",
+  BANNER_ORDER: () => "Spisak banera se u međuvremenu promijenio — osvježite stranicu.",
 };
 
 const FALLBACK: Record<number, string> = {
